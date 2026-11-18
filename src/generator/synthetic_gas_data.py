@@ -1,6 +1,5 @@
 import sys
 import numpy as np
-import pandas as pd
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -97,6 +96,8 @@ def generate_and_save_all_scenarios(output_dir="data/synthetic"):
     """
     Generates all 4 scenarios (combining all 4 gases) and saves them as CSV files.
     """
+    import pandas as pd  # only the CSV export needs pandas; keeps the receiver free of it
+
     out_path = Path(output_dir)
     out_path.mkdir(parents=True, exist_ok=True) # Automatically creates data/synthetic
 
