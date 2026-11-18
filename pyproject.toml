@@ -1,7 +1,7 @@
 [project]
-name = "sewer-gas-prediction"
+name = "nexdrain"
 version = "0.1.0"
-description = "Add your description here"
+description = "NEXDRAIN: early-warning detection of toxic gas in sewage tanks"
 readme = "README.md"
 authors = [
     { name = "flockbird19", email = "vendev19@gmail.com" }
@@ -14,7 +14,7 @@ dependencies = [
 ]
 
 [project.scripts]
-sewer-gas-prediction = "sewer_gas_prediction:main"
+nexdrain = "nexdrain:main"
 
 [build-system]
 requires = ["uv_build>=0.12.3,<0.13.0"]
