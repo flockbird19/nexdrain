@@ -1,0 +1,381 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NEXDRAIN</title>
+<style>
+/* Offline by design: no web fonts, scripts or images. Palette from the poster. */
+:root {
+  --bg: #F4F6F7; --surface: #FFFFFF; --ink: #10201F; --muted: #4A5A59; --line: #D5DDDD;
+  --accent: #0E6B5E; --track: #E6ECEC;
+  --safe: #0E6B5E; --warn: #A15C07; --imminent: #C2410C; --critical: #B91C1C; --off: #8A9897;
+  --on-status: #FFFFFF;
+  --font: "Manrope", "Segoe UI", system-ui, -apple-system, Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0C1515; --surface: #142020; --ink: #E6EEED; --muted: #A3B3B1; --line: #2A3A39;
+    --accent: #3FB8A2; --track: #22302F;
+    --safe: #2E9C88; --warn: #C27A12; --imminent: #DB5A1F; --critical: #D63A3A; --off: #66777A;
+  }
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--font); }
+body { min-height: 100dvh; font-variant-numeric: tabular-nums; }
+button, select { font: inherit; }
+.wrap { max-width: 1440px; margin: 0 auto; padding: 16px 24px 24px; }
+
+/* Top bar */
+header { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; min-height: 64px; }
+.brand { font-weight: 800; font-size: 26px; letter-spacing: 0.02em; }
+.brand span { color: var(--accent); }
+.tabs { display: inline-flex; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+.tabs button { border: 0; background: transparent; color: var(--muted); padding: 10px 18px; min-height: 44px; cursor: pointer; font-weight: 600; }
+.tabs button[aria-selected="true"] { background: var(--ink); color: var(--bg); }
+.link { margin-left: auto; color: var(--muted); font-size: 15px; text-align: right; line-height: 1.4; }
+.link b { color: var(--ink); }
+.btn { border: 1px solid var(--line); background: var(--surface); color: var(--ink); border-radius: 10px; padding: 10px 16px; min-height: 44px; cursor: pointer; font-weight: 600; }
+.btn:hover { border-color: var(--ink); }
+.btn:active { transform: translateY(1px); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+
+/* Banner */
+.banner { margin-top: 16px; border-radius: 16px; padding: 22px 28px; color: var(--on-status); background: var(--safe); display: grid; grid-template-columns: 1fr auto; gap: 8px 24px; align-items: center; position: relative; overflow: hidden; }
+.banner .word { font-size: clamp(36px, 5vw, 64px); font-weight: 800; line-height: 1.05; letter-spacing: 0.01em; display: flex; align-items: center; gap: 16px; }
+.banner .why { font-size: 19px; line-height: 1.45; max-width: 75ch; opacity: 0.95; }
+.banner .eta { text-align: right; }
+.banner .eta .k { font-size: 15px; opacity: 0.9; }
+.banner .eta .v { font-size: clamp(28px, 3.4vw, 44px); font-weight: 800; }
+.shape { width: 0.7em; height: 0.7em; flex: none; background: currentColor; }
+.s-Safe .shape { border-radius: 50%; }
+.s-EarlyWarning .shape, .s-Imminent .shape { clip-path: polygon(50% 0, 100% 100%, 0 100%); }
+.s-Critical .shape { clip-path: polygon(30% 0, 70% 0, 100% 30%, 100% 70%, 70% 100%, 30% 100%, 0 70%, 0 30%); }
+.banner.s-Safe { background: var(--safe); }
+.banner.s-EarlyWarning { background: var(--warn); }
+.banner.s-Imminent { background: var(--imminent); }
+.banner.s-Critical { background: var(--critical); }
+.banner.s-Stale { background: var(--off); }
+.sim-flag { display: none; margin-top: 16px; border: 2px dashed var(--ink); border-radius: 12px; padding: 10px 16px; font-weight: 800; font-size: 20px; letter-spacing: 0.08em; }
+.sim .sim-flag { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.sim-flag small { font-weight: 500; letter-spacing: 0; font-size: 15px; color: var(--muted); }
+
+/* Tiles */
+.grid { margin-top: 16px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+.tile { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 16px 20px; display: flex; flex-direction: column; gap: 10px; min-height: 170px; border-top: 6px solid var(--line); }
+.tile.s-Safe { border-top-color: var(--safe); }
+.tile.s-EarlyWarning { border-top-color: var(--warn); }
+.tile.s-Imminent { border-top-color: var(--imminent); }
+.tile.s-Critical { border-top-color: var(--critical); }
+.tile .head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+.tile .name { font-size: 22px; font-weight: 800; }
+.tile .sub { color: var(--muted); font-size: 15px; }
+.tile .status { font-weight: 800; font-size: 20px; display: flex; align-items: center; gap: 8px; }
+.tile.s-Safe .status { color: var(--safe); }
+.tile.s-EarlyWarning .status { color: var(--warn); }
+.tile.s-Imminent .status { color: var(--imminent); }
+.tile.s-Critical .status { color: var(--critical); }
+.big { font-size: 40px; font-weight: 800; line-height: 1; }
+.big small { font-size: 18px; font-weight: 600; color: var(--muted); }
+.bar { position: relative; height: 14px; background: var(--track); border-radius: 7px; overflow: visible; }
+.bar i { position: absolute; inset: 0 auto 0 0; border-radius: 7px; background: var(--muted); width: 0; transition: width 0.4s ease; }
+.tile.s-Safe .bar i { background: var(--safe); }
+.tile.s-EarlyWarning .bar i { background: var(--warn); }
+.tile.s-Imminent .bar i { background: var(--imminent); }
+.tile.s-Critical .bar i { background: var(--critical); }
+.bar .tick { position: absolute; top: -4px; bottom: -4px; width: 2px; background: var(--ink); opacity: 0.5; }
+.tile .foot { color: var(--muted); font-size: 15px; line-height: 1.4; margin-top: auto; }
+.tile .eta { font-weight: 700; color: var(--ink); }
+.tile.off { border-top-color: var(--line); background: transparent; border-style: dashed; }
+.tile.off .name { color: var(--muted); }
+.tile.off .status { color: var(--muted); font-weight: 600; font-size: 18px; }
+.tile.dim { opacity: 0.55; }
+
+/* Chart + controls */
+.lower { margin-top: 16px; display: grid; grid-template-columns: 2fr 1fr; gap: 16px; }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 18px 20px; }
+.panel h2 { margin: 0 0 12px; font-size: 18px; }
+canvas { width: 100%; height: 230px; display: block; }
+.controls { display: grid; gap: 12px; }
+.controls label { display: grid; gap: 6px; font-weight: 600; font-size: 15px; }
+.controls select { min-height: 44px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); color: var(--ink); padding: 8px 10px; }
+.row { display: flex; gap: 12px; flex-wrap: wrap; }
+.note { color: var(--muted); font-size: 14px; line-height: 1.5; margin-top: 16px; }
+.live-only, .sim-only { display: none; }
+.live .live-only, .sim .sim-only { display: revert; }
+
+@media (max-width: 1100px) { .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .lower { grid-template-columns: 1fr; } }
+@media (max-width: 640px) {
+  .wrap { padding: 12px 16px; } .grid { grid-template-columns: 1fr; }
+  .banner { grid-template-columns: 1fr; } .banner .eta { text-align: left; } .link { margin-left: 0; text-align: left; }
+}
+@media (prefers-reduced-motion: reduce) { .bar i { transition: none; } }
+</style>
+</head>
+<body class="live">
+<div class="wrap">
+  <header>
+    <div class="brand">NEX<span>DRAIN</span></div>
+    <div class="tabs" role="tablist" aria-label="Mode">
+      <button role="tab" id="tab-live" aria-selected="true">Live</button>
+      <button role="tab" id="tab-sim" aria-selected="false">Simulation</button>
+    </div>
+    <div class="link live-only" id="link" aria-live="polite"></div>
+    <button class="btn live-only" id="mute" type="button">Mute buzzer</button>
+  </header>
+
+  <div class="sim-flag" role="note">
+    <span>SIMULATED DATA</span>
+    <small id="sim-info">Generated readings run through the same prediction software.</small>
+  </div>
+
+  <section class="banner s-Stale" id="banner" aria-live="polite">
+    <div>
+      <div class="word"><span class="shape" aria-hidden="true"></span><span id="word">Waiting for data</span></div>
+      <div class="why" id="why">Starting up.</div>
+    </div>
+    <div class="eta" id="eta-box" hidden><div class="k">Time to danger level</div><div class="v" id="eta"></div></div>
+  </section>
+
+  <section class="grid" id="tiles" aria-label="Sensors"></section>
+
+  <div class="lower">
+    <section class="panel">
+      <h2>Last 10 minutes, % of each danger level</h2>
+      <canvas id="chart" role="img" aria-label="Line chart of each reading as a percentage of its danger level"></canvas>
+    </section>
+    <section class="panel">
+      <div class="sim-only">
+        <h2>Run a simulated leak</h2>
+        <div class="controls">
+          <label>Scenario
+            <select id="scenario">
+              <option value="slow_leak">Slow leak</option>
+              <option value="fast_leak">Fast leak</option>
+              <option value="sensor_fault">Faulty sensor (should stay safe)</option>
+              <option value="baseline">Normal air</option>
+              <option value="overflow">Tank overflow</option>
+            </select>
+          </label>
+          <label>Gas
+            <select id="gas">
+              <option value="H2S">Hydrogen sulphide (H2S)</option>
+              <option value="CH4">Methane (CH4)</option>
+              <option value="CO">Carbon monoxide (CO)</option>
+              <option value="NH3">Ammonia (NH3)</option>
+            </select>
+          </label>
+          <label>Speed
+            <select id="speed">
+              <option value="1">Real time</option>
+              <option value="5">5 times faster</option>
+              <option value="10" selected>10 times faster</option>
+              <option value="20">20 times faster</option>
+            </select>
+          </label>
+          <div class="row">
+            <button class="btn primary" id="sim-start" type="button">Start</button>
+            <button class="btn" id="sim-stop" type="button">Stop</button>
+          </div>
+          <div class="sub" id="sim-progress" aria-live="polite"></div>
+        </div>
+      </div>
+      <div class="live-only">
+        <h2>Box</h2>
+        <div class="controls">
+          <div id="box-info" class="sub">No box connected.</div>
+          <div class="row">
+            <button class="btn" id="test" type="button">Test lights and buzzer</button>
+            <button class="btn" id="relearn" type="button">Relearn clean air</button>
+          </div>
+        </div>
+      </div>
+      <p class="note">Statistical trend detection, not AI. The sensors are not calibrated: every ppm figure is an estimate. The box sounds its own alarm without this screen.</p>
+    </section>
+  </div>
+</div>
+
+<script>
+"use strict";
+const STALE_S = 30;
+const NAMES = { H2S: "Hydrogen sulphide", CH4: "Methane", CO: "Carbon monoxide", NH3: "Ammonia", O2: "Oxygen" };
+const LIMITS = { H2S: "10 ppm", CH4: "5,000 ppm", CO: "35 ppm", NH3: "25 ppm", O2: "below 19.5%" };
+const ORDER = ["H2S", "CH4", "CO", "NH3", "O2"];
+const COLORS = { H2S: "#DB2777", CH4: "#0E9F8A", CO: "#EA580C", NH3: "#3B82F6", Level: null };
+let mode = location.hash === "#sim" ? "sim" : "live";
+let last = null;
+
+const $ = id => document.getElementById(id);
+const cls = s => "s-" + String(s).replace(/\s/g, "");
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const ppm = v => v == null ? "" : v >= 100 ? Math.round(v).toLocaleString("en-IN") : v.toFixed(1);
+
+function setMode(m) {
+  mode = m;
+  document.body.className = m;
+  $("tab-live").setAttribute("aria-selected", m === "live");
+  $("tab-sim").setAttribute("aria-selected", m === "sim");
+  history.replaceState(null, "", m === "sim" ? "#sim" : "#");
+  if (last) render(last);
+}
+$("tab-live").onclick = () => setMode("live");
+$("tab-sim").onclick = () => setMode("sim");
+
+async function post(path, body) {
+  try {
+    const r = await fetch(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body || {}) });
+    return r.ok;
+  } catch { return false; }
+}
+$("sim-start").onclick = () => post("/api/sim/start", { scenario: $("scenario").value, gas: $("gas").value, speed: Number($("speed").value) });
+$("sim-stop").onclick = () => post("/api/sim/stop");
+$("mute").onclick = () => post("/api/box", { cmd: last?.live?.state?.box?.muted ? "U" : "M" });
+$("test").onclick = () => post("/api/box", { cmd: "T" });
+$("relearn").onclick = () => { if (confirm("Relearn clean air? Only do this with the sensors in clean air.")) post("/api/relearn"); };
+
+function banner(status, why, eta) {
+  const b = $("banner");
+  b.className = "banner " + cls(status);
+  $("word").textContent = status === "Stale" ? "No data" : status;
+  $("why").textContent = why;
+  $("eta-box").hidden = !eta;
+  $("eta").textContent = eta || "";
+}
+
+function gasTile(key, g, extra) {
+  if (!g || !g.installed) {
+    return `<article class="tile off"><div class="head"><div class="name">${NAMES[key]}</div><div class="sub">${key}</div></div>
+      <div class="status">Sensor not installed</div>
+      <div class="foot">Planned for the pilot box. Danger level ${LIMITS[key]}.</div></article>`;
+  }
+  const pct = Math.min(g.pct ?? 0, 120);
+  let foot = g.eta ? `<span class="eta">Danger in ${esc(g.eta)}</span>` : `Danger level ${LIMITS[key]}`;
+  if (extra?.learning != null) foot = `Learning clean air, ${extra.learning} of 30 readings`;
+  else if (extra?.phase === "H") foot = `Heater cleaning cycle, reading held (${extra.phase_s} s of 60)`;
+  return `<article class="tile ${cls(g.status)}${extra?.dim ? " dim" : ""}">
+    <div class="head"><div class="name">${NAMES[key]}</div><div class="sub">${key}</div></div>
+    <div class="status"><span class="shape" aria-hidden="true"></span>${esc(g.status)}</div>
+    <div class="big">${Math.round(g.pct ?? 0)}<small>% of danger level</small></div>
+    <div class="bar" aria-hidden="true"><i style="width:${pct / 1.2}%"></i><span class="tick" style="left:${100 / 1.2}%"></span></div>
+    <div class="foot">${foot}<br>About ${ppm(g.ppm_est)} ppm, estimated, not calibrated</div></article>`;
+}
+
+function levelTile(lv, dim) {
+  if (!lv) return "";
+  const fill = Math.min(lv.fill_pct ?? 0, 100);
+  const foot = lv.eta ? `<span class="eta">Overflow in ${esc(lv.eta)}</span>` : "Warnings at 70, 85 and 95% full";
+  return `<article class="tile ${cls(lv.status)}${dim ? " dim" : ""}">
+    <div class="head"><div class="name">Sewage level</div><div class="sub">${lv.dist_cm != null ? lv.dist_cm.toFixed(0) + " cm to surface" : "no echo"}</div></div>
+    <div class="status"><span class="shape" aria-hidden="true"></span>${esc(lv.status)}</div>
+    <div class="big">${Math.round(fill)}<small>% full</small></div>
+    <div class="bar" aria-hidden="true"><i style="width:${fill}%"></i><span class="tick" style="left:70%"></span><span class="tick" style="left:95%"></span></div>
+    <div class="foot">${foot}</div></article>`;
+}
+
+function headline(st) {
+  const gases = Object.entries(st.gases).filter(([, g]) => g.installed);
+  const worst = ["Critical", "Imminent", "Early Warning"];
+  for (const s of worst) {
+    const hit = gases.find(([, g]) => g.status === s);
+    if (hit) return { why: hit[1].reason + (st.multi_gas ? " Several gases are rising together." : ""), eta: hit[1].eta };
+    if (st.level && st.level.status === s) return { why: st.level.reason, eta: st.level.eta };
+  }
+  return { why: "All fitted sensors are below their danger levels and not rising.", eta: null };
+}
+
+function render(d) {
+  last = d;
+  if (mode === "sim") {
+    const s = d.sim;
+    $("sim-info").textContent = s.state
+      ? `${s.scenario.replace("_", " ")} on ${s.gas}, ${s.speed} times real time, minute ${Math.floor(s.t / 60)} of ${s.duration / 60}${s.running ? "" : ", finished"}`
+      : "Generated readings run through the same prediction software.";
+    $("sim-progress").textContent = s.running ? "Running." : s.finished ? "Finished. Start another run any time." : "";
+    if (!s.state) {
+      banner("Stale", "Choose a scenario and press Start.", null);
+      $("tiles").innerHTML = ORDER.map(k => gasTile(k, null)).join("");
+      return draw([], ["H2S", "CH4", "CO", "NH3", "Level"]);
+    }
+    const h = headline(s.state);
+    banner(s.state.site_status, h.why, h.eta);
+    $("tiles").innerHTML = ORDER.map(k => gasTile(k, s.state.gases[k])).join("") + levelTile(s.state.level);
+    return draw(s.history, ["H2S", "CH4", "CO", "NH3", "Level"]);
+  }
+
+  const L = d.live, st = L.state;
+  const stale = L.age_s == null || L.age_s > STALE_S;
+  const via = st?.box?.source === "lora" ? `LoRa${st.box.rssi != null ? ", signal " + st.box.rssi + " dBm" : ""}` : st?.box?.source === "usb" ? "USB cable" : st?.box?.source || "";
+  $("link").innerHTML = L.age_s == null ? "<b>No box yet</b><br>Waiting for the first reading"
+    : `<b>${stale ? "Last reading " + Math.round(L.age_s) + " s ago" : "Live, updated " + Math.max(0, Math.round(L.age_s)) + " s ago"}</b><br>${esc(via)}, ${L.lines} readings, ${L.lost} lost`;
+  $("mute").textContent = st?.box?.muted ? "Unmute buzzer" : "Mute buzzer";
+
+  if (!st) {
+    banner("Stale", "Waiting for the sensor box. Check the USB cable or the radio.", null);
+    $("tiles").innerHTML = ORDER.map(k => gasTile(k, null)).join("");
+    return draw([], ["CH4", "CO", "Level"]);
+  }
+  const learning = st.learning || {};
+  if (stale) banner("Stale", `No reading for ${Math.round(L.age_s)} seconds. Check the box power and cable. The box still sounds its own alarm.`, null);
+  else { const h = headline(st); banner(st.site_status, h.why, h.eta); }
+  $("tiles").innerHTML = ORDER.map(k => gasTile(k, st.gases[k], {
+    dim: stale, learning: learning[k], phase: st.gases[k]?.phase, phase_s: st.gases[k]?.phase_s,
+  })).join("") + levelTile(st.level, stale);
+  const b = st.box;
+  $("box-info").textContent = `Box ${b.id}, running ${Math.floor(b.uptime_s / 3600)} h ${Math.floor(b.uptime_s / 60) % 60} min.`
+    + (b.alarm ? " Box alarm is sounding." : " Box alarm is quiet.") + (b.muted ? " Buzzer muted." : "");
+  draw(L.history, ["CH4", "CO", "Level"]);
+}
+
+function draw(hist, series) {
+  const c = $("chart"), dpr = window.devicePixelRatio || 1;
+  const w = c.clientWidth, h = c.clientHeight;
+  c.width = w * dpr; c.height = h * dpr;
+  const x = c.getContext("2d");
+  x.setTransform(dpr, 0, 0, dpr, 0, 0);
+  x.clearRect(0, 0, w, h);
+  const css = getComputedStyle(document.documentElement);
+  const ink = css.getPropertyValue("--ink"), muted = css.getPropertyValue("--muted"), line = css.getPropertyValue("--line");
+  const pad = { l: 44, r: 90, t: 10, b: 24 }, top = 120;
+  const Y = v => pad.t + (h - pad.t - pad.b) * (1 - Math.min(v, top) / top);
+  x.font = "13px " + css.getPropertyValue("--font");
+  x.fillStyle = muted; x.strokeStyle = line; x.lineWidth = 1;
+  for (const v of [0, 50, 100]) {
+    x.beginPath(); x.moveTo(pad.l, Y(v)); x.lineTo(w - pad.r, Y(v)); x.stroke();
+    x.fillText(v + "%", 6, Y(v) + 4);
+  }
+  x.strokeStyle = ink; x.setLineDash([6, 4]);
+  x.beginPath(); x.moveTo(pad.l, Y(100)); x.lineTo(w - pad.r, Y(100)); x.stroke(); x.setLineDash([]);
+  x.fillStyle = ink; x.fillText("Danger level", pad.l + 6, Y(100) - 6);
+  if (!hist || hist.length < 2) {
+    x.fillStyle = muted; x.fillText("No readings yet", pad.l + 12, Y(60));
+    return;
+  }
+  const t0 = hist[0][0], t1 = hist[hist.length - 1][0], span = Math.max(t1 - t0, 1);
+  const X = t => pad.l + (w - pad.l - pad.r) * (t - t0) / span;
+  series.forEach((name, i) => {
+    const pts = hist.map(r => [r[0], r[i + 1]]).filter(p => p[1] != null);
+    if (pts.length < 2) return;
+    const col = COLORS[name] || ink;
+    x.strokeStyle = col; x.lineWidth = 2.5;
+    x.beginPath(); pts.forEach(([t, v], j) => j ? x.lineTo(X(t), Y(v)) : x.moveTo(X(t), Y(v))); x.stroke();
+    const [, lv] = pts[pts.length - 1];
+    x.fillStyle = col; x.fillText(name, w - pad.r + 8, Math.min(Math.max(Y(lv) + 4, 14), h - 8));
+  });
+}
+
+async function tick() {
+  try {
+    const r = await fetch("/api/state", { cache: "no-store" });
+    render(await r.json());
+  } catch {
+    banner("Stale", "The receiver program is not responding. Restart it on the Pi or laptop.", null);
+  }
+}
+setMode(mode);
+tick();
+setInterval(tick, 1000);
+window.addEventListener("resize", () => last && render(last));
+</script>
+</body>
+</html>
