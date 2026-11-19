@@ -504,6 +504,11 @@ class App:
             def log_message(self, *a):
                 pass
 
+            def end_headers(self):   # dashboard files: browsers re-check every load, so an update never mixes old and new files
+                if not self.path.startswith("/api"):
+                    self.send_header("Cache-Control", "no-cache")
+                super().end_headers()
+
             def _json(self, obj, code=200):
                 body = json.dumps(obj, default=float).encode()
                 self.send_response(code)
