@@ -4,25 +4,37 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>NEXDRAIN</title>
+<script>
+  // Theme before first paint: saved choice, else the system setting.
+  (function () {
+    let t = null;
+    try { t = localStorage.getItem("nx-theme"); } catch (e) {}
+    if (t !== "light" && t !== "dark") t = matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+    document.documentElement.dataset.theme = t;
+  })();
+</script>
 <style>
 /* Works with no internet: the font is bundled in fonts/, nothing else is loaded. Palette and font from the poster. */
 @font-face { font-family: "Manrope"; src: url("fonts/manrope-latin.woff2") format("woff2"); font-weight: 400 800; font-display: swap; }
-:root {
-  --bg: #F4F6F7; --surface: #FFFFFF; --ink: #10201F; --muted: #52615F; --faint: #8A9896; --line: #E0E6E5;
-  --accent: #0E6B5E;
-  --safe: #0E6B5E; --warn: #9A5806; --imminent: #BF400C; --critical: #B91C1C; --off: #6B7978;
-  --ground: #CBD0C8; --ground-top: #B4BAB1; --concrete: #D6DAD4; --concrete-dark: #BCC2BB; --tank-in: #EEF2F1;
-  --water-1: #879558; --water-2: #5C6A3E; --helmet: #E3A21A; --worker: #2F4F4D;
-  --font: "Manrope", "Segoe UI", system-ui, sans-serif;
+:root, [data-theme="light"] {
+  --bg: #ECF1F1; --glow-a: rgba(14, 107, 94, 0.13); --glow-b: rgba(79, 124, 247, 0.07);
+  --glass: rgba(255, 255, 255, 0.70); --glass-hi: rgba(255, 255, 255, 0.95); --line: rgba(16, 32, 31, 0.09);
+  --ink: #0E1D1C; --muted: #50605E; --faint: #8B9997; --shadow: rgba(16, 40, 38, 0.16);
+  --accent: #0E6B5E; --on-accent: #FFFFFF;
+  --safe: #0E7A6A; --warn: #A86206; --imminent: #C4440E; --critical: #C81E1E; --off: #6B7978;
+  --ground: #C9CFC7; --ground-top: #B1B8AF; --conc-1: #DFE3DD; --conc-2: #C4CAC2; --in-1: #F6F8F8; --in-2: #E3E9E7;
+  --water-1: #8D9C5C; --water-2: #55633A; --water-hi: #A9B877; --helmet: #E3A21A; --worker: #2F4F4D;
+  --c-h2s: #D63C73; --c-ch4: #0F9E8E; --c-co: #E07B1A; --c-nh3: #3F6FE6; --c-lvl: #7C8B89;
 }
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #0B1414; --surface: #121D1D; --ink: #E7EFEE; --muted: #A6B5B3; --faint: #6F807E; --line: #223130;
-    --accent: #3FB8A2;
-    --safe: #3FB8A2; --warn: #E0A030; --imminent: #F07A40; --critical: #F26060; --off: #7D8B8A;
-    --ground: #2C3533; --ground-top: #3A4542; --concrete: #34403D; --concrete-dark: #2A3432; --tank-in: #0F1A1A;
-    --water-1: #5F6E3A; --water-2: #3E4A26; --worker: #A7C9C3;
-  }
+[data-theme="dark"] {
+  --bg: #061010; --glow-a: rgba(63, 184, 162, 0.16); --glow-b: rgba(79, 124, 247, 0.10);
+  --glass: rgba(18, 31, 31, 0.66); --glass-hi: rgba(255, 255, 255, 0.07); --line: rgba(255, 255, 255, 0.08);
+  --ink: #E8F0EF; --muted: #A3B2B0; --faint: #6C7C7A; --shadow: rgba(0, 0, 0, 0.55);
+  --accent: #3FB8A2; --on-accent: #062221;
+  --safe: #3FC9B0; --warn: #F2B134; --imminent: #FF8A4C; --critical: #FF5D5D; --off: #7D8B8A;
+  --ground: #263130; --ground-top: #344140; --conc-1: #3A4643; --conc-2: #263030; --in-1: #142221; --in-2: #0A1414;
+  --water-1: #63723C; --water-2: #36421F; --water-hi: #7F8F4E; --worker: #A7C9C3;
+  --c-h2s: #FF6B9A; --c-ch4: #34D3BE; --c-co: #FFA24D; --c-nh3: #7C9CFF; --c-lvl: #9AA8A6;
 }
 /* --status: text, lines, haze. --solid: backgrounds under white text (4.5:1 in both themes). */
 .s-Safe { --status: var(--safe); --solid: #0E6B5E; }
@@ -32,117 +44,166 @@
 .s-Stale { --status: var(--off); --solid: #5B6968; }
 
 * { box-sizing: border-box; }
-html, body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--font); }
-body { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; min-height: 100dvh; font-variant-numeric: tabular-nums; }
-@media (min-width: 1000px) { body { height: 100dvh; } }
+html { background: var(--bg); color-scheme: light dark; }
+body {
+  margin: 0; color: var(--ink); font-family: "Manrope", "Segoe UI", system-ui, sans-serif; font-variant-numeric: tabular-nums;
+  background:
+    radial-gradient(900px 600px at 8% -10%, var(--glow-a), transparent 60%),
+    radial-gradient(900px 700px at 100% 10%, var(--glow-b), transparent 60%),
+    var(--bg);
+  background-attachment: fixed; min-height: 100dvh; transition: background-color 0.4s ease;
+}
 button, select { font: inherit; color: inherit; }
 :focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+.wrap { max-width: 1440px; margin: 0 auto; padding: 0 24px 40px; }
+
+.glass {
+  background: linear-gradient(180deg, var(--glass-hi), transparent 38%), var(--glass);
+  border: 1px solid var(--line); border-radius: 24px;
+  box-shadow: inset 0 1px 0 var(--glass-hi), 0 18px 50px -24px var(--shadow);
+  backdrop-filter: blur(18px) saturate(140%); -webkit-backdrop-filter: blur(18px) saturate(140%);
+}
 
 /* ---------- top bar ---------- */
-.top { display: flex; align-items: center; gap: 14px; padding: 14px 28px; flex-wrap: wrap; }
-.brand { font-weight: 800; font-size: 22px; letter-spacing: 0.01em; margin-right: 6px; }
+.top { position: sticky; top: 0; z-index: 10; margin: 0 -24px; padding: 12px 24px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  background: color-mix(in srgb, var(--bg) 72%, transparent); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border-bottom: 1px solid var(--line); }
+.brand { font-weight: 800; font-size: 22px; letter-spacing: 0.01em; margin-right: 4px; }
 .brand span { color: var(--accent); }
-.seg { display: inline-flex; background: var(--surface); border: 1px solid var(--line); border-radius: 999px; padding: 3px; }
-.seg button { border: 0; background: transparent; color: var(--muted); padding: 7px 16px; border-radius: 999px; cursor: pointer; font-weight: 700; font-size: 14px; }
+.seg { display: inline-flex; background: var(--glass); border: 1px solid var(--line); border-radius: 999px; padding: 3px; position: relative; }
+.seg button { border: 0; background: transparent; color: var(--muted); padding: 7px 16px; border-radius: 999px; cursor: pointer; font-weight: 700; font-size: 14px; transition: background 0.25s ease, color 0.25s ease; }
 .seg button[aria-selected="true"] { background: var(--ink); color: var(--bg); }
 .simpill { background: var(--ink); color: var(--bg); font-weight: 800; font-size: 12px; letter-spacing: 0.08em; padding: 7px 12px; border-radius: 999px; }
 .spacer { flex: 1; }
 .ctl { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.ctl select { border: 1px solid var(--line); background: var(--surface); border-radius: 10px; padding: 8px 10px; font-weight: 600; font-size: 14px; min-height: 38px; cursor: pointer; }
-.btn { border: 1px solid var(--line); background: var(--surface); border-radius: 10px; padding: 8px 14px; min-height: 38px; cursor: pointer; font-weight: 700; font-size: 14px; }
-.btn:hover { border-color: var(--faint); }
-.btn:active { transform: translateY(1px); }
-.btn:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
-.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--bg); }
+.ctl select { border: 1px solid var(--line); background: var(--glass); border-radius: 12px; padding: 8px 10px; font-weight: 600; font-size: 14px; min-height: 38px; cursor: pointer; }
+.btn { border: 1px solid var(--line); background: var(--glass); border-radius: 12px; padding: 8px 14px; min-height: 38px; cursor: pointer; font-weight: 700; font-size: 14px; transition: transform 0.15s ease, border-color 0.2s ease, box-shadow 0.2s ease; }
+.btn:hover { border-color: var(--faint); box-shadow: 0 6px 18px -10px var(--shadow); }
+.btn:active { transform: scale(0.97); }
+.btn:disabled { opacity: 0.45; cursor: not-allowed; transform: none; box-shadow: none; }
+.btn.primary { background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 85%, white), var(--accent)); border-color: var(--accent); color: var(--on-accent); box-shadow: 0 8px 22px -10px var(--accent); }
 .btn.ghost { border-color: transparent; background: transparent; color: var(--muted); }
-.link { display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--muted); margin-right: 6px; }
+.theme { display: inline-flex; align-items: center; gap: 8px; }
+.theme i { width: 14px; height: 14px; border-radius: 50%; background: linear-gradient(90deg, var(--ink) 50%, transparent 50%); border: 2px solid var(--ink); }
+.link { display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--muted); margin-right: 4px; }
 .link b { color: var(--ink); font-weight: 700; }
-.dot { width: 9px; height: 9px; border-radius: 50%; background: var(--status); flex: none; }
+.dot { width: 9px; height: 9px; border-radius: 50%; background: var(--status); flex: none; box-shadow: 0 0 0 0 var(--status); }
+.link.s-Safe .dot { animation: live 2s ease-out infinite; }
+@keyframes live { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--status) 60%, transparent); } 100% { box-shadow: 0 0 0 9px transparent; } }
 
-/* ---------- main ---------- */
-main { display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(360px, 1fr); grid-template-rows: minmax(0, 1fr); gap: 28px; padding: 4px 28px 0; min-height: 0; }
-.scene { min-height: 0; display: flex; align-items: center; justify-content: center; }
-#scene { width: 100%; height: 100%; display: block; }
-.side { display: flex; flex-direction: column; gap: 14px; min-height: 0; overflow-y: auto; padding-bottom: 6px; }
+/* ---------- hero ---------- */
+.hero { margin-top: 20px; display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(320px, 1fr); gap: 8px; padding: 10px;
+  min-height: clamp(520px, calc(100dvh - 120px), 760px); position: relative; overflow: hidden;
+  box-shadow: inset 0 1px 0 var(--glass-hi), 0 0 0 1px color-mix(in srgb, var(--status) 22%, transparent), 0 30px 80px -36px color-mix(in srgb, var(--status) 60%, transparent);
+  transition: box-shadow 0.6s ease; }
+.hero::before { content: ""; position: absolute; inset: -40% 40% 40% -20%; background: radial-gradient(closest-side, color-mix(in srgb, var(--status) 18%, transparent), transparent); pointer-events: none; transition: background 0.6s ease; }
+.hero.s-Critical { animation: alarm 1.2s ease-in-out infinite; }
+.hero.s-Imminent { animation: alarm 2.2s ease-in-out infinite; }
+@keyframes alarm {
+  0%, 100% { box-shadow: inset 0 1px 0 var(--glass-hi), 0 0 0 1px color-mix(in srgb, var(--status) 30%, transparent), 0 30px 80px -36px color-mix(in srgb, var(--status) 60%, transparent); }
+  50% { box-shadow: inset 0 1px 0 var(--glass-hi), 0 0 0 3px color-mix(in srgb, var(--status) 55%, transparent), 0 30px 100px -20px color-mix(in srgb, var(--status) 85%, transparent); }
+}
+.scene { position: relative; min-height: 0; display: flex; align-items: center; justify-content: center; }
+#scene { width: 100%; height: 100%; max-height: 740px; display: block; }
 
-/* status */
-.status { border-radius: 20px; padding: 16px 22px 18px; background: color-mix(in srgb, var(--status) 10%, var(--surface)); border: 1px solid color-mix(in srgb, var(--status) 28%, transparent); }
-.meta { display: flex; justify-content: space-between; gap: 12px; font-size: 13px; color: var(--muted); font-weight: 600; }
-.word { margin-top: 4px; font-size: clamp(32px, 3.3vw, 48px); font-weight: 800; line-height: 1.05; color: var(--status); display: flex; align-items: center; gap: 14px; letter-spacing: -0.01em; }
-.why { margin-top: 8px; font-size: 17px; line-height: 1.45; max-width: 46ch; }
-.eta { margin-top: 10px; display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.status { position: relative; display: flex; flex-direction: column; justify-content: center; padding: 28px 30px; border-radius: 18px;
+  background: linear-gradient(160deg, color-mix(in srgb, var(--status) 14%, transparent), transparent 70%); }
+.meta { display: flex; justify-content: space-between; gap: 12px; font-size: 13px; color: var(--muted); font-weight: 700; }
+.word { margin-top: 10px; font-size: clamp(40px, 4.4vw, 64px); font-weight: 800; line-height: 1.02; letter-spacing: -0.02em; color: var(--status); display: flex; align-items: center; gap: 16px; transition: color 0.5s ease; }
+.why { margin-top: 12px; font-size: 18px; line-height: 1.5; max-width: 40ch; }
+.eta { margin-top: 24px; padding: 16px 18px; border-radius: 16px; background: var(--glass); border: 1px solid var(--line); }
 .eta[hidden] { display: none; }
-.eta .v { font-size: clamp(26px, 2.6vw, 36px); font-weight: 800; letter-spacing: -0.01em; }
-.eta .k { font-size: 14px; color: var(--muted); font-weight: 600; }
+.eta .k { font-size: 13px; color: var(--muted); font-weight: 700; }
+.eta .v { margin-top: 2px; font-size: clamp(32px, 3.4vw, 46px); font-weight: 800; letter-spacing: -0.02em; }
+.facts { margin-top: 22px; display: flex; flex-wrap: wrap; gap: 8px; }
+.fact { font-size: 13px; font-weight: 700; color: var(--muted); padding: 6px 10px; border-radius: 999px; border: 1px solid var(--line); background: var(--glass); }
 .shape { width: 0.56em; height: 0.56em; flex: none; background: currentColor; display: inline-block; }
 .s-Safe .shape { border-radius: 50%; }
 .s-EarlyWarning .shape, .s-Imminent .shape { clip-path: polygon(50% 0, 100% 100%, 0 100%); }
 .s-Critical .shape { clip-path: polygon(30% 0, 70% 0, 100% 30%, 100% 70%, 70% 100%, 30% 100%, 0 70%, 0 30%); }
 .s-Stale .shape { border-radius: 2px; }
 
-/* sensor tiles */
-.tiles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
-.tile { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 12px 16px 10px; display: flex; flex-direction: column; gap: 3px; min-width: 0; }
-.tile.wide { grid-column: 1 / -1; }
+/* ---------- sections ---------- */
+h2 { font-size: 20px; font-weight: 800; letter-spacing: -0.01em; margin: 34px 4px 14px; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 14px; }
+.tile { padding: 18px 18px 14px; border-radius: 20px; display: flex; flex-direction: column; gap: 6px; min-width: 0; position: relative; overflow: hidden;
+  transition: transform 0.25s ease, box-shadow 0.25s ease; animation: rise-in 0.6s cubic-bezier(0.16, 1, 0.3, 1) both; animation-delay: calc(var(--i, 0) * 70ms); }
+.tile::after { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 3px; background: var(--status); opacity: 0.9; transition: background 0.5s ease; }
+.tile:hover { transform: translateY(-3px); box-shadow: inset 0 1px 0 var(--glass-hi), 0 24px 50px -24px var(--shadow); }
+@keyframes rise-in { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
 .t-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
 .t-name { font-weight: 700; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.chip { color: var(--status); font-weight: 700; font-size: 13px; display: flex; align-items: center; gap: 6px; white-space: nowrap; }
-.t-val { font-size: 30px; font-weight: 800; line-height: 1.1; letter-spacing: -0.01em; }
+.chip { color: var(--status); font-weight: 800; font-size: 12.5px; display: flex; align-items: center; gap: 6px; white-space: nowrap; padding: 4px 9px; border-radius: 999px; background: color-mix(in srgb, var(--status) 12%, transparent); transition: color 0.5s ease, background 0.5s ease; }
+.t-val { font-size: 38px; font-weight: 800; line-height: 1.05; letter-spacing: -0.02em; }
 .t-val small { font-size: 13px; font-weight: 600; color: var(--muted); letter-spacing: 0; margin-left: 6px; }
-.spark { width: 100%; height: 28px; display: block; }
-.spark .lim { stroke: var(--faint); stroke-width: 1; stroke-dasharray: 3 4; }
-.spark .ln { fill: none; stroke: var(--status); stroke-width: 2.2; stroke-linejoin: round; stroke-linecap: round; }
-.spark .ar { fill: var(--status); opacity: 0.12; }
+.spark { width: 100%; height: 48px; display: block; color: var(--status); margin-top: 4px; }
+.spark .lim { stroke: var(--faint); stroke-width: 1; stroke-dasharray: 3 4; vector-effect: non-scaling-stroke; }
+.spark .ln { fill: none; stroke: var(--status); stroke-width: 2.4; stroke-linejoin: round; stroke-linecap: round; vector-effect: non-scaling-stroke; }
 .t-foot { font-size: 13px; color: var(--muted); font-weight: 600; }
-.t-foot.hot { color: var(--status); font-weight: 700; }
-.offline { font-size: 13.5px; color: var(--muted); line-height: 1.45; padding: 0 4px; }
+.t-foot.hot { color: var(--status); font-weight: 800; }
+.offline { font-size: 14px; color: var(--muted); line-height: 1.5; margin: 14px 4px 0; }
 .offline b { color: var(--ink); }
 
-/* drawing */
+.chart { padding: 18px 20px 14px; }
+.legend { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
+.legend button { display: inline-flex; align-items: center; gap: 8px; border: 1px solid var(--line); background: var(--glass); border-radius: 999px; padding: 6px 12px; font-size: 13px; font-weight: 700; cursor: pointer; transition: opacity 0.2s ease; }
+.legend button[aria-pressed="false"] { opacity: 0.4; }
+.legend i { width: 18px; height: 3px; border-radius: 2px; background: var(--c); }
+.legend i.dash { background: repeating-linear-gradient(90deg, var(--c) 0 5px, transparent 5px 8px); }
+#chart { width: 100%; height: 320px; display: block; cursor: crosshair; }
+
+/* ---------- drawing ---------- */
 .ground { fill: var(--ground); } .ground-top { fill: var(--ground-top); }
-.concrete { fill: var(--concrete); } .concrete-dark { fill: var(--concrete-dark); }
-.tank-in { fill: var(--tank-in); }
-.lid { fill: var(--concrete-dark); stroke: var(--ink); stroke-width: 1.5; }
-.haze { fill: var(--status); transition: opacity 0.8s ease; }
-#waterg { transition: transform 1s ease; }
+.lid { fill: var(--conc-2); stroke: var(--ink); stroke-width: 1.5; }
+.haze { fill: var(--status); transition: opacity 0.9s ease, fill 0.6s ease; }
+#waterg { transition: transform 1.2s cubic-bezier(0.16, 1, 0.3, 1); }
+.wave-a { animation: drift 7s linear infinite; }
+.wave-b { animation: drift 11s linear infinite reverse; }
+@keyframes drift { from { transform: translateX(0); } to { transform: translateX(-140px); } }
 .mark { stroke: var(--faint); stroke-width: 1.2; stroke-dasharray: 4 4; }
 .mark-t { fill: var(--muted); font-size: 12px; font-weight: 700; }
 .ink-fill { fill: var(--ink); } .ink-stroke { stroke: var(--ink); }
 .box-t { fill: var(--bg); font-size: 11px; font-weight: 800; letter-spacing: 0.08em; }
-.led { fill: var(--status); }
+.led { fill: var(--status); transition: fill 0.5s ease; }
 .beam { stroke: var(--faint); stroke-width: 1.4; stroke-dasharray: 3 5; }
 .wave { fill: none; stroke: var(--accent); stroke-width: 3; stroke-linecap: round; opacity: 0.12; }
 .linked .wave { animation: pulse 1.8s ease-in-out infinite; }
 .linked .wave:nth-child(2) { animation-delay: 0.3s; }
 .linked .wave:nth-child(3) { animation-delay: 0.6s; }
 @keyframes pulse { 0%, 100% { opacity: 0.12; } 40% { opacity: 0.9; } }
-.recv { fill: var(--surface); stroke: var(--ink); stroke-width: 2; }
+.packet { fill: var(--accent); }
+.recv { fill: var(--glass); stroke: var(--ink); stroke-width: 2; }
 .lbl { fill: var(--muted); font-size: 13px; font-weight: 700; }
 .helmet { fill: var(--helmet); } .worker { fill: var(--worker); }
-.bubble { fill: var(--solid); } .bubble-t { fill: #fff; font-size: 14px; font-weight: 800; }
-.air { fill: var(--surface); stroke: color-mix(in srgb, var(--status) 40%, transparent); }
+.bubble { fill: var(--solid); transition: fill 0.5s ease; } .bubble-t { fill: #fff; font-size: 14px; font-weight: 800; }
+.s-Critical #bubble { animation: throb 1.2s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
+@keyframes throb { 50% { transform: scale(1.05); } }
+.air { fill: var(--glass); stroke: color-mix(in srgb, var(--status) 45%, transparent); }
 .air-t { fill: var(--status); font-size: 14px; font-weight: 800; }
 .fill-t { fill: #fff; font-size: 15px; font-weight: 800; }
+.particle { fill: var(--status); animation: float linear infinite; transform-box: fill-box; }
+@keyframes float { 0% { transform: translateY(0); opacity: 0; } 15% { opacity: 1; } 100% { transform: translateY(-330px); opacity: 0; } }
+.Stale-particles .particle, .s-Stale .particle { animation-play-state: paused; opacity: 0; }
+.bub { fill: none; stroke: var(--water-hi); stroke-width: 1.5; animation: bub linear infinite; transform-box: fill-box; }
+@keyframes bub { 0% { transform: translateY(0); opacity: 0; } 20% { opacity: 0.9; } 100% { transform: translateY(-150px); opacity: 0; } }
 .simbadge { fill: var(--ink); } .simbadge-t { fill: var(--bg); font-size: 12px; font-weight: 800; letter-spacing: 0.08em; }
-
-footer { font-size: 12px; color: var(--faint); padding: 8px 28px 12px; }
 
 .live-only, .sim-only { display: none !important; }
 .live .live-only, .sim .sim-only { display: revert !important; }
 .live .ctl.live-only, .sim .ctl.sim-only { display: flex !important; }
 
-@media (max-width: 999px) {
-  main { grid-template-columns: 1fr; }
-  .scene { min-height: 380px; }
-  .side { overflow: visible; }
+@media (max-width: 1000px) {
+  .hero { grid-template-columns: 1fr; min-height: 0; }
+  .scene { min-height: 360px; }
+  .status { padding: 20px; }
 }
 @media (prefers-reduced-motion: reduce) {
-  #waterg, .haze { transition: none; }
-  .linked .wave { animation: none; opacity: 0.85; }
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+  .particle, .bub { display: none; }
 }
 </style>
 </head>
 <body class="live">
+<div class="wrap">
 <header class="top">
   <div class="brand">NEX<span>DRAIN</span></div>
   <div class="seg" role="tablist" aria-label="Mode">
@@ -182,16 +243,22 @@ footer { font-size: 12px; color: var(--faint); padding: 8px 28px 12px; }
     <button class="btn" id="test" type="button">Test</button>
     <button class="btn ghost" id="relearn" type="button">Relearn clean air</button>
   </div>
+  <button class="btn theme" id="theme" type="button"><i aria-hidden="true"></i><span id="theme-t">Dark</span></button>
 </header>
 
-<main>
-  <section class="scene" aria-label="Sewage tank with the NEXDRAIN box">
+<section class="hero glass s-Stale" id="hero" aria-label="Tank">
+  <div class="scene">
     <svg id="scene" class="s-Stale" viewBox="0 0 720 640" role="img" aria-labelledby="scene-desc">
       <desc id="scene-desc">Cross-section of a sewage tank. The NEXDRAIN box hangs under the manhole lid, measures the air and the sewage level, and radios the readings to a receiver. The worker at the lid is warned before opening it.</desc>
       <defs>
+        <linearGradient id="conc" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color: var(--conc-1)"/><stop offset="1" style="stop-color: var(--conc-2)"/></linearGradient>
+        <linearGradient id="inside-g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color: var(--in-1)"/><stop offset="1" style="stop-color: var(--in-2)"/></linearGradient>
         <linearGradient id="water" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color: var(--water-1)"/><stop offset="1" style="stop-color: var(--water-2)"/></linearGradient>
-        <linearGradient id="hazeg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity="1"/><stop offset="1" stop-color="#fff" stop-opacity="0.55"/></linearGradient>
+        <linearGradient id="boxg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity="0.28"/><stop offset="0.5" stop-color="#fff" stop-opacity="0"/></linearGradient>
+        <linearGradient id="hazeg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity="1"/><stop offset="1" stop-color="#fff" stop-opacity="0.5"/></linearGradient>
         <clipPath id="inside"><rect x="80" y="178" width="560" height="426"/></clipPath>
+        <clipPath id="airclip"><rect id="airclip-r" x="80" y="190" width="560" height="300"/></clipPath>
+        <clipPath id="waterclip"><rect id="waterclip-r" x="80" y="400" width="560" height="204"/></clipPath>
         <mask id="hazem"><rect x="80" y="190" width="560" height="414" fill="url(#hazeg)"/></mask>
       </defs>
 
@@ -199,8 +266,9 @@ footer { font-size: 12px; color: var(--faint); padding: 8px 28px 12px; }
       <g transform="translate(556 70)">
         <line class="ink-stroke" x1="58" y1="0" x2="58" y2="-24" stroke-width="3"/>
         <circle class="ink-fill" cx="58" cy="-26" r="4"/>
-        <rect class="recv" x="0" y="0" width="76" height="46" rx="9"/>
-        <circle class="led" cx="17" cy="23" r="5"/>
+        <rect class="recv" x="0" y="0" width="76" height="46" rx="10"/>
+        <rect x="2" y="2" width="72" height="20" rx="8" fill="url(#boxg)"/>
+        <circle class="led" id="recv-led" cx="17" cy="23" r="5"/>
         <text class="lbl" x="38" y="66" text-anchor="middle">Receiver</text>
       </g>
 
@@ -210,6 +278,7 @@ footer { font-size: 12px; color: var(--faint); padding: 8px 28px 12px; }
         <path class="wave" d="M 46 -30 A 46 46 0 0 1 46 30"/>
         <path class="wave" d="M 70 -44 A 68 68 0 0 1 70 44"/>
       </g>
+      <circle id="packet" class="packet" cx="412" cy="110" r="5" opacity="0"/>
 
       <!-- worker at the lid -->
       <g transform="translate(204 78)">
@@ -228,7 +297,7 @@ footer { font-size: 12px; color: var(--faint); padding: 8px 28px 12px; }
       </g>
 
       <!-- ground and manhole -->
-      <rect class="tank-in" x="300" y="150" width="120" height="28"/>
+      <rect x="300" y="150" width="120" height="28" fill="url(#inside-g)"/>
       <rect class="ground" x="0" y="150" width="300" height="28"/>
       <rect class="ground" x="420" y="150" width="300" height="28"/>
       <rect class="ground-top" x="0" y="150" width="300" height="4"/>
@@ -236,21 +305,23 @@ footer { font-size: 12px; color: var(--faint); padding: 8px 28px 12px; }
       <rect class="lid" x="294" y="142" width="132" height="14" rx="4"/>
 
       <!-- tank -->
-      <rect class="concrete" x="60" y="178" width="600" height="446" rx="14"/>
-      <rect class="tank-in" x="80" y="178" width="560" height="426"/>
-      <rect class="concrete-dark" x="60" y="178" width="240" height="12"/>
-      <rect class="concrete-dark" x="420" y="178" width="240" height="12"/>
+      <rect x="60" y="178" width="600" height="446" rx="16" fill="url(#conc)"/>
+      <rect x="80" y="178" width="560" height="426" fill="url(#inside-g)"/>
+      <rect x="60" y="178" width="240" height="12" style="fill: var(--conc-2)"/>
+      <rect x="420" y="178" width="240" height="12" style="fill: var(--conc-2)"/>
 
-      <!-- gas in the air space, stronger near the top -->
+      <!-- gas in the air space: tint plus drifting particles -->
       <rect id="haze" class="haze" x="80" y="190" width="560" height="414" mask="url(#hazem)" opacity="0"/>
+      <g id="particles" clip-path="url(#airclip)"></g>
 
-      <!-- sewage, drawn full and slid down to the current level -->
+      <!-- sewage with a moving surface; drawn full and slid down to the current level -->
       <g clip-path="url(#inside)">
         <g id="waterg" style="transform: translateY(240px)">
-          <rect x="80" y="262" width="560" height="342" fill="url(#water)"/>
-          <rect x="80" y="259" width="560" height="6" rx="3" style="fill: var(--water-1)" opacity="0.9"/>
+          <g class="wave-b"><path id="wave-b" fill="url(#water)" opacity="0.55"/></g>
+          <g class="wave-a"><path id="wave-a" fill="url(#water)"/></g>
         </g>
       </g>
+      <g id="bubbles" clip-path="url(#waterclip)"></g>
       <text id="fill-t" class="fill-t" x="616" y="590" text-anchor="end"></text>
 
       <!-- overflow marks (100% full = y 262, floor = y 604) -->
@@ -261,9 +332,10 @@ footer { font-size: 12px; color: var(--faint); padding: 8px 28px 12px; }
       <!-- NEXDRAIN box under the lid: antenna out through the vent, level sensor looking down -->
       <line class="ink-stroke" x1="410" y1="192" x2="410" y2="112" stroke-width="3"/>
       <circle class="ink-fill" cx="410" cy="110" r="4"/>
-      <rect class="ink-fill" x="318" y="192" width="84" height="42" rx="8"/>
+      <rect class="ink-fill" x="318" y="192" width="84" height="42" rx="9"/>
+      <rect x="320" y="194" width="80" height="18" rx="7" fill="url(#boxg)"/>
       <text class="box-t" x="360" y="218" text-anchor="middle">NEXDRAIN</text>
-      <circle class="led" cx="390" cy="202" r="4"/>
+      <circle class="led" id="box-led" cx="390" cy="202" r="4"/>
       <path class="ink-fill" d="M 348 234 L 372 234 L 368 244 L 352 244 Z"/>
       <line id="beam" class="beam" x1="360" y1="246" x2="360" y2="500"/>
 
@@ -278,50 +350,71 @@ footer { font-size: 12px; color: var(--faint); padding: 8px 28px 12px; }
         <text class="simbadge-t" x="639" y="25" text-anchor="middle">SIMULATED</text>
       </g>
     </svg>
-  </section>
+  </div>
 
-  <aside class="side">
-    <section class="status s-Stale" id="status" aria-live="polite">
-      <div class="meta"><span>Tank status</span><span id="meta-r"></span></div>
-      <div class="word"><span class="shape" aria-hidden="true"></span><span id="word">Waiting</span></div>
-      <div class="why" id="why">Starting up.</div>
-      <div class="eta" id="eta-box" hidden><span class="v" id="eta"></span><span class="k">until the danger level</span></div>
-    </section>
-    <section class="tiles" id="tiles" aria-label="Sensors"></section>
-    <p class="offline" id="offline"></p>
-  </aside>
-</main>
+  <div class="status s-Stale" id="status" aria-live="polite">
+    <div class="meta"><span>Tank status</span><span id="meta-r"></span></div>
+    <div class="word"><span class="shape" aria-hidden="true"></span><span id="word">Waiting</span></div>
+    <div class="why" id="why">Starting up.</div>
+    <div class="eta" id="eta-box" hidden><div class="k">Time until the danger level</div><div class="v" id="eta"></div></div>
+    <div class="facts" id="facts"></div>
+  </div>
+</section>
 
-<footer>Statistical trend detection, not AI. The sensors are not calibrated, so ppm figures are estimates. The box sounds its own alarm even without this screen. The drawing illustrates the setup.</footer>
+<h2>Sensors</h2>
+<section class="tiles" id="tiles" aria-label="Sensor readings"></section>
+<p class="offline" id="offline"></p>
+
+<h2>Last 10 minutes</h2>
+<section class="chart glass" aria-label="Readings over the last 10 minutes">
+  <div class="legend" id="legend"></div>
+  <canvas id="chart" role="img" aria-label="Each reading as a percentage of its danger level over the last 10 minutes"></canvas>
+</section>
+</div>
 
 <script>
 "use strict";
 const STALE_S = 30;
-const NAMES = { H2S: "Hydrogen sulphide", CH4: "Methane", CO: "Carbon monoxide", NH3: "Ammonia", O2: "Oxygen" };
+const NAMES = { H2S: "Hydrogen sulphide", CH4: "Methane", CO: "Carbon monoxide", NH3: "Ammonia", O2: "Oxygen", Level: "Sewage level" };
 const LIMITS = { H2S: "10 ppm", CH4: "5,000 ppm", CO: "35 ppm", NH3: "25 ppm", O2: "below 19.5%" };
-const ORDER = ["H2S", "CH4", "CO", "NH3", "O2"];
+const GASES = ["H2S", "CH4", "CO", "NH3", "O2"];
 const COLS = { live: { CH4: 1, CO: 2, Level: 3 }, sim: { H2S: 1, CH4: 2, CO: 3, NH3: 4, Level: 5 } };  // history columns
+const CVAR = { H2S: "--c-h2s", CH4: "--c-ch4", CO: "--c-co", NH3: "--c-nh3", Level: "--c-lvl" };
 const FLOOR_Y = 604, FULL_Y = 262;
+const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
 let mode = location.hash === "#sim" ? "sim" : "live";
-let last = null;
+let last = null, lastLines = -1, lastSimT = -1, lastStatus = "", hidden = new Set(), hover = null;
 
 const $ = id => document.getElementById(id);
 const cls = s => "s-" + String(s).replace(/\s/g, "");
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 const pctTxt = v => (v ?? 0) >= 200 ? "200%+" : Math.round(v ?? 0) + "%";
 const ppm = v => v == null ? "" : v >= 100 ? Math.round(v).toLocaleString("en-IN") : v.toFixed(1);
+const css = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 
+// ---------- theme ----------
+function paintThemeButton() { $("theme-t").textContent = document.documentElement.dataset.theme === "dark" ? "Light" : "Dark"; }
+$("theme").onclick = () => {
+  const t = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
+  document.documentElement.dataset.theme = t;
+  try { localStorage.setItem("nx-theme", t); } catch (e) {}
+  paintThemeButton();
+  if (last) render(last);
+};
+paintThemeButton();
+
+// ---------- mode + controls ----------
 function setMode(m) {
   mode = m;
   document.body.className = m;
   $("tab-live").setAttribute("aria-selected", m === "live");
   $("tab-sim").setAttribute("aria-selected", m === "sim");
   history.replaceState(null, "", m === "sim" ? "#sim" : "#");
+  tileKeys = "";
   if (last) render(last);
 }
 $("tab-live").onclick = () => setMode("live");
 $("tab-sim").onclick = () => setMode("sim");
-
 async function post(path, body) {
   try {
     const r = await fetch(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body || {}) });
@@ -334,6 +427,30 @@ $("mute").onclick = () => post("/api/box", { cmd: last?.live?.state?.box?.muted 
 $("test").onclick = () => post("/api/box", { cmd: "T" });
 $("relearn").onclick = () => { if (confirm("Relearn clean air? Only do this with the sensors in clean air.")) post("/api/relearn"); };
 
+// ---------- drawing setup: moving water surface, gas particles, bubbles ----------
+(function buildScene() {
+  const wave = (amp, y0) => {
+    let d = `M -200 ${y0}`;
+    for (let x = -200; x < 1000; x += 140) d += ` q 35 ${-amp} 70 0 t 70 0`;
+    return d + ` L 1000 ${FLOOR_Y + 10} L -200 ${FLOOR_Y + 10} Z`;
+  };
+  $("wave-a").setAttribute("d", wave(7, FULL_Y));
+  $("wave-b").setAttribute("d", wave(5, FULL_Y - 4));
+  const rnd = (a, b) => a + Math.random() * (b - a);
+  let p = "";
+  for (let i = 0; i < 26; i++) {
+    p += `<circle class="particle" cx="${rnd(96, 624).toFixed(0)}" cy="${rnd(470, 600).toFixed(0)}" r="${rnd(1.6, 3.6).toFixed(1)}"
+      style="animation-duration:${rnd(6, 12).toFixed(1)}s;animation-delay:-${rnd(0, 12).toFixed(1)}s"/>`;
+  }
+  $("particles").innerHTML = p;
+  let b = "";
+  for (let i = 0; i < 12; i++) {
+    b += `<circle class="bub" cx="${rnd(96, 624).toFixed(0)}" cy="${rnd(560, 610).toFixed(0)}" r="${rnd(2, 4.5).toFixed(1)}"
+      style="animation-duration:${rnd(3, 7).toFixed(1)}s;animation-delay:-${rnd(0, 7).toFixed(1)}s"/>`;
+  }
+  $("bubbles").innerHTML = b;
+})();
+
 // ---------- words ----------
 function headline(st) {
   const gases = Object.entries(st.gases).filter(([, g]) => g.installed);
@@ -342,11 +459,9 @@ function headline(st) {
     const hit = gases.find(([, g]) => g.status === s);
     if (hit) {
       const [k, g] = hit;
-      return {
-        key: k, eta: g.eta,
+      return { key: k, eta: g.eta,
         why: (s === "Critical" ? `${NAMES[k]} has reached its danger level of ${LIMITS[k]}.`
-          : `${NAMES[k]} is rising. It is at ${pctTxt(g.pct)} of its danger level of ${LIMITS[k]}.`) + more,
-      };
+          : `${NAMES[k]} is rising. It is at ${pctTxt(g.pct)} of its danger level of ${LIMITS[k]}.`) + more };
     }
     if (st.level && st.level.status === s) {
       const f = Math.round(st.level.fill_pct ?? 0);
@@ -356,99 +471,222 @@ function headline(st) {
   return { key: null, eta: null, why: "Every fitted sensor is below its danger level and steady." };
 }
 
-function setStatus(status, why, eta, meta) {
+function setStatus(status, why, eta, meta, facts) {
+  $("hero").className = "hero glass " + cls(status);
   $("status").className = "status " + cls(status);
-  $("word").textContent = status === "Stale" ? "No data" : status;
+  const word = status === "Stale" ? "No data" : status;
+  if (word !== lastStatus && !reduce) {
+    $("word").animate([{ opacity: 0, transform: "translateY(10px) scale(0.98)" }, { opacity: 1, transform: "none" }],
+      { duration: 500, easing: "cubic-bezier(0.16, 1, 0.3, 1)" });
+  }
+  lastStatus = word;
+  $("word").textContent = word;
   $("why").textContent = why;
   $("eta-box").hidden = !eta;
   $("eta").textContent = eta || "";
   $("meta-r").textContent = meta || "";
+  $("facts").innerHTML = (facts || []).map(f => `<span class="fact">${esc(f)}</span>`).join("");
 }
 
-// ---------- tiles ----------
-function spark(hist, col) {
+// ---------- tiles (built once per set of sensors, then updated in place so numbers can glide) ----------
+let tileKeys = "";
+function buildTiles(keys) {
+  $("tiles").innerHTML = keys.map((k, i) => `<article class="tile glass" id="tile-${k}" style="--i:${i}">
+    <div class="t-head"><span class="t-name">${NAMES[k]}</span><span class="chip"><span class="shape" aria-hidden="true"></span><span class="chip-t"></span></span></div>
+    <div class="t-val"><span class="num" data-v="0">0</span>%<small>${k === "Level" ? "full" : "of " + LIMITS[k]}</small></div>
+    <svg class="spark" viewBox="0 0 300 48" preserveAspectRatio="none" aria-hidden="true">
+      <defs><linearGradient id="sg-${k}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="currentColor" stop-opacity="0.32"/><stop offset="1" stop-color="currentColor" stop-opacity="0"/></linearGradient></defs>
+      <path class="ar" fill="url(#sg-${k})"/><line class="lim" x1="0" x2="300" y1="8" y2="8"/><path class="ln"/></svg>
+    <div class="t-foot"></div></article>`).join("");
+  tileKeys = keys.join();
+}
+
+function glide(el, to) {
+  const from = Number(el.dataset.v) || 0;
+  el.dataset.v = to;
+  const fmt = v => v >= 200 ? "200+" : Math.round(v);
+  if (reduce || Math.abs(to - from) < 0.5) { el.textContent = fmt(to); return; }
+  let t0 = null;
+  const step = now => {
+    t0 ??= now;   // start on the first frame's clock, so progress never goes negative
+    const k = Math.min(Math.max((now - t0) / 600, 0), 1), e = 1 - Math.pow(1 - k, 3);
+    el.textContent = fmt(from + (to - from) * e);
+    if (k < 1 && Number(el.dataset.v) === to) requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
+}
+
+function sparkPaths(hist, col) {
   const pts = (hist || []).slice(-300).map(r => [r[0], r[col]]).filter(p => p[1] != null);
-  const W = 300, H = 34, top = 120;
-  const lim = H - H * 100 / top;
-  if (pts.length < 2) return `<svg class="spark" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-hidden="true"><line class="lim" x1="0" x2="${W}" y1="${lim}" y2="${lim}"/></svg>`;
+  if (pts.length < 2) return ["", ""];
+  const W = 300, H = 48, top = 120;
   const t0 = pts[0][0], span = Math.max(pts[pts.length - 1][0] - t0, 1);
-  const xy = pts.map(([t, v]) => [(t - t0) / span * W, H - H * Math.min(v, top) / top]);
-  const d = xy.map(([x, y], i) => (i ? "L" : "M") + x.toFixed(1) + " " + y.toFixed(1)).join(" ");
-  return `<svg class="spark" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-hidden="true">
-    <path class="ar" d="${d} L ${W} ${H} L 0 ${H} Z"/><line class="lim" x1="0" x2="${W}" y1="${lim}" y2="${lim}"/>
-    <path class="ln" d="${d}" vector-effect="non-scaling-stroke"/></svg>`;
+  const d = pts.map(([t, v], i) => (i ? "L" : "M") + ((t - t0) / span * W).toFixed(1) + " " + (H - H * Math.min(v, top) / top).toFixed(1)).join(" ");
+  return [d, `${d} L ${W} ${H} L 0 ${H} Z`];
 }
 
-function gasTile(k, g, hist, cols, extra) {
-  let foot = `<div class="t-foot">About ${ppm(g.ppm_est)} ppm, estimated</div>`;
-  if (g.eta) foot = `<div class="t-foot hot">Danger in ${esc(g.eta)}</div>`;
-  else if (extra?.learning != null) foot = `<div class="t-foot">Learning clean air, ${extra.learning} of 30</div>`;
-  else if (extra?.phase === "H") foot = `<div class="t-foot">Heater cleaning cycle, reading held</div>`;
-  return `<article class="tile ${cls(g.status)}">
-    <div class="t-head"><span class="t-name">${NAMES[k]}</span><span class="chip"><span class="shape" aria-hidden="true"></span>${esc(g.status)}</span></div>
-    <div class="t-val">${pctTxt(g.pct)}<small>of ${LIMITS[k]}</small></div>
-    ${spark(hist, cols[k])}${foot}</article>`;
-}
-
-function levelTile(lv, hist, cols, wide) {
-  if (!lv) return "";
-  const foot = lv.eta ? `<div class="t-foot hot">Overflow in ${esc(lv.eta)}</div>`
-    : `<div class="t-foot">Warnings at 70, 85 and 95% full</div>`;
-  return `<article class="tile ${wide ? "wide " : ""}${cls(lv.status)}">
-    <div class="t-head"><span class="t-name">Sewage level</span><span class="chip"><span class="shape" aria-hidden="true"></span>${esc(lv.status)}</span></div>
-    <div class="t-val">${Math.round(lv.fill_pct ?? 0)}%<small>full</small></div>
-    ${spark(hist, cols.Level)}${foot}</article>`;
-}
-
-function tiles(st, hist, extraFor) {
-  if (!st) { $("tiles").innerHTML = ""; $("offline").innerHTML = ""; return; }
+function updateTiles(st, hist, extraFor) {
+  if (!st) { $("tiles").innerHTML = ""; tileKeys = ""; $("offline").innerHTML = ""; return; }
+  const fitted = GASES.filter(k => st.gases[k]?.installed), off = GASES.filter(k => !st.gases[k]?.installed);
+  const keys = st.level ? [...fitted, "Level"] : fitted;
+  if (keys.join() !== tileKeys) buildTiles(keys);
   const cols = COLS[mode];
-  const fitted = ORDER.filter(k => st.gases[k]?.installed), off = ORDER.filter(k => !st.gases[k]?.installed);
-  $("tiles").innerHTML = fitted.map(k => gasTile(k, st.gases[k], hist, cols, extraFor?.(k))).join("")
-    + levelTile(st.level, hist, cols, fitted.length % 2 === 0);
+  for (const k of keys) {
+    const el = $("tile-" + k), isLvl = k === "Level", g = isLvl ? st.level : st.gases[k];
+    el.className = "tile glass " + cls(g.status);
+    el.querySelector(".chip-t").textContent = g.status;
+    glide(el.querySelector(".num"), isLvl ? (g.fill_pct ?? 0) : (g.pct ?? 0));
+    const [ln, ar] = sparkPaths(hist, cols[k]);
+    el.querySelector(".ln").setAttribute("d", ln);
+    el.querySelector(".ar").setAttribute("d", ar);
+    const foot = el.querySelector(".t-foot"), x = extraFor?.(k) || {};
+    let txt = isLvl ? "Warnings at 70, 85 and 95% full" : `About ${ppm(g.ppm_est)} ppm, estimated`, hot = false;
+    if (g.eta) { txt = (isLvl ? "Overflow in " : "Danger in ") + g.eta; hot = true; }
+    else if (x.learning != null) txt = `Learning clean air, ${x.learning} of 30`;
+    else if (x.phase === "H") txt = "Heater cleaning cycle, reading held";
+    foot.textContent = txt;
+    foot.className = "t-foot" + (hot ? " hot" : "");
+  }
   $("offline").innerHTML = off.length
     ? `<b>Not fitted on the prototype:</b> ${off.map(k => NAMES[k].toLowerCase()).join(", ")}. Planned for the pilot box.` : "";
 }
 
 // ---------- drawing ----------
-function scene(status, st, linked) {
+function scene(status, st, linked, pinged) {
   $("scene").setAttribute("class", cls(status) + (linked ? " linked" : ""));
   const fill = st?.level ? Math.max(0, Math.min(st.level.fill_pct ?? 0, 100)) : 30;
   const top = FLOOR_Y - (FLOOR_Y - FULL_Y) * fill / 100;
   $("waterg").style.transform = `translateY(${top - FULL_Y}px)`;
-  $("beam").setAttribute("y2", Math.max(top - 4, 250));
+  $("airclip-r").setAttribute("height", Math.max(top - 190, 0));
+  $("waterclip-r").setAttribute("y", top + 6);
+  $("waterclip-r").setAttribute("height", Math.max(FLOOR_Y - top - 6, 0));
+  $("beam").setAttribute("y2", Math.max(top - 6, 250));
   $("fill-t").textContent = st?.level ? `Sewage ${Math.round(fill)}% full` : "";
-  $("fill-t").setAttribute("y", Math.min(top + 28, 592));
+  $("fill-t").setAttribute("y", Math.min(top + 32, 592));
 
   const pcts = st ? Object.values(st.gases).filter(g => g.installed).map(g => g.pct || 0) : [];
-  const worst = pcts.length ? Math.max(...pcts) : 0;
-  $("haze").setAttribute("opacity", status === "Stale" || !st ? 0 : Math.min(0.05 + worst / 100 * 0.55, 0.62).toFixed(2));
+  const worst = pcts.length ? Math.max(...pcts) : 0, live = st && status !== "Stale";
+  $("haze").setAttribute("opacity", live ? Math.min(0.04 + worst / 100 * 0.5, 0.55).toFixed(2) : 0);
+  $("particles").setAttribute("opacity", live ? Math.min(0.15 + worst / 100, 1).toFixed(2) : 0);
 
-  // one line about the air, sized to its text
   const h = st ? headline(st) : null;
   let air = "";
-  if (st && status !== "Stale") {
+  if (live) {
     const g = h.key && h.key !== "Level" ? st.gases[h.key] : null;
     air = g ? `Air: ${NAMES[h.key].toLowerCase()} ${g.status === "Critical" ? "at danger level" : "rising"}, ${pctTxt(g.pct)}` : "Air: normal";
   }
-  fitText("air", "air-t", air, (w) => [100, w]);
-
-  const say = !st || status === "Stale" ? "No data from the box"
+  fitText("air", "air-t", air, () => 100);
+  const say = !live ? "No data from the box"
     : status === "Critical" ? "Do not open: dangerous now"
     : status === "Safe" ? "" : `Do not open: ${h.eta ? "danger in " + h.eta : "gas rising"}`;
-  fitText("bubble", "bubble-t", say, (w) => [Math.min(Math.max(8, 205 - w / 2), 712 - w), w], true);
+  fitText("bubble", "bubble-t", say, w => Math.min(Math.max(8, 205 - w / 2), 712 - w), true);
+
+  if (pinged && linked && !reduce) {   // one packet and one blink per new reading
+    $("packet").animate([{ transform: "translate(0,0)", opacity: 1 }, { transform: "translate(150px,-14px)", opacity: 1, offset: 0.85 }, { transform: "translate(178px,-17px)", opacity: 0 }],
+      { duration: 800, easing: "cubic-bezier(0.3, 0, 0.2, 1)" });
+    for (const id of ["box-led", "recv-led"]) $(id).animate([{ opacity: 1 }, { opacity: 0.2 }, { opacity: 1 }], { duration: 400, delay: id === "recv-led" ? 650 : 0 });
+  }
 }
 
-function fitText(groupId, textId, text, place, center) {
+function fitText(groupId, textId, text, xFor, center) {
   const g = $(groupId), t = $(textId);
   g.setAttribute("visibility", text ? "visible" : "hidden");
   t.textContent = text;
   if (!text) return;
-  const w = t.getComputedTextLength() + 36, [x] = place(w);
-  const r = g.querySelector("rect");
+  const w = t.getComputedTextLength() + 36, x = xFor(w), r = g.querySelector("rect");
   r.setAttribute("x", x); r.setAttribute("width", w);
   t.setAttribute("x", center ? x + w / 2 : x + 18);
 }
+
+// ---------- the full chart ----------
+function seriesFor() { return mode === "sim" ? ["H2S", "CH4", "CO", "NH3", "Level"] : ["CH4", "CO", "Level"]; }
+function buildLegend() {
+  const s = seriesFor();
+  if ($("legend").dataset.k === s.join()) return;
+  $("legend").dataset.k = s.join();
+  $("legend").innerHTML = s.map(k => `<button type="button" data-k="${k}" aria-pressed="${!hidden.has(k)}">
+    <i class="${k === "Level" ? "dash" : ""}" style="--c: var(${CVAR[k]})"></i>${NAMES[k]}</button>`).join("");
+  $("legend").querySelectorAll("button").forEach(b => b.onclick = () => {
+    const k = b.dataset.k;
+    hidden.has(k) ? hidden.delete(k) : hidden.add(k);
+    b.setAttribute("aria-pressed", !hidden.has(k));
+    if (last) drawChart();
+  });
+}
+
+function chartData() {
+  if (!last) return [];
+  return (mode === "sim" ? last.sim.history : last.live.history) || [];
+}
+
+function drawChart() {
+  buildLegend();
+  const hist = chartData(), series = seriesFor(), cols = COLS[mode];
+  const c = $("chart"), dpr = window.devicePixelRatio || 1, w = c.clientWidth, h = c.clientHeight;
+  c.width = w * dpr; c.height = h * dpr;
+  const x = c.getContext("2d");
+  x.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const ink = css("--ink"), muted = css("--muted"), line = css("--line"), crit = css("--critical");
+  const pad = { l: 46, r: 16, t: 14, b: 28 }, top = 125, span = 600;
+  const Y = v => pad.t + (h - pad.t - pad.b) * (1 - Math.min(v, top) / top);
+  const tEnd = hist.length ? hist[hist.length - 1][0] : 0;
+  const X = t => pad.l + (w - pad.l - pad.r) * (1 - (tEnd - t) / span);
+  x.font = "600 12px Manrope, system-ui, sans-serif";
+
+  // danger zone above 100%
+  x.fillStyle = crit; x.globalAlpha = 0.07; x.fillRect(pad.l, Y(top), w - pad.l - pad.r, Y(100) - Y(top)); x.globalAlpha = 1;
+  x.strokeStyle = line; x.lineWidth = 1; x.fillStyle = muted;
+  for (const v of [0, 25, 50, 75]) { x.beginPath(); x.moveTo(pad.l, Y(v)); x.lineTo(w - pad.r, Y(v)); x.stroke(); x.fillText(v + "%", 8, Y(v) + 4); }
+  x.strokeStyle = crit; x.setLineDash([6, 5]); x.lineWidth = 1.5;
+  x.beginPath(); x.moveTo(pad.l, Y(100)); x.lineTo(w - pad.r, Y(100)); x.stroke(); x.setLineDash([]);
+  x.fillStyle = crit; x.fillText("100%", 8, Y(100) + 4); x.fillText("Danger level", pad.l + 8, Y(100) - 7);
+  x.fillStyle = muted;
+  for (let m = 0; m <= 10; m += 2) {
+    const px = X(tEnd - m * 60);
+    x.textAlign = m === 0 ? "right" : "center";
+    x.fillText(m === 0 ? "now" : `${m} min ago`, Math.min(px, w - pad.r), h - 8);
+  }
+  x.textAlign = "left";
+  if (hist.length < 2) { x.fillStyle = muted; x.font = "700 14px Manrope, system-ui, sans-serif"; x.fillText("No readings yet", pad.l + 16, Y(55)); return; }
+
+  const shown = hist.filter(r => tEnd - r[0] <= span);
+  for (const k of series) {
+    if (hidden.has(k)) continue;
+    const pts = shown.map(r => [X(r[0]), r[cols[k]]]).filter(p => p[1] != null).map(([px, v]) => [px, Y(v)]);
+    if (pts.length < 2) continue;
+    const col = css(CVAR[k]);
+    const grad = x.createLinearGradient(0, pad.t, 0, h - pad.b);
+    grad.addColorStop(0, col + "33"); grad.addColorStop(1, col + "00");
+    x.beginPath(); pts.forEach(([px, py], i) => i ? x.lineTo(px, py) : x.moveTo(px, py));
+    x.lineTo(pts[pts.length - 1][0], Y(0)); x.lineTo(pts[0][0], Y(0)); x.closePath();
+    x.fillStyle = grad; x.fill();
+    x.beginPath(); pts.forEach(([px, py], i) => i ? x.lineTo(px, py) : x.moveTo(px, py));
+    x.strokeStyle = col; x.lineWidth = 2.5; x.lineJoin = "round";
+    x.setLineDash(k === "Level" ? [7, 5] : []); x.stroke(); x.setLineDash([]);
+    const [ex, ey] = pts[pts.length - 1];
+    x.beginPath(); x.arc(ex, ey, 4, 0, Math.PI * 2); x.fillStyle = col; x.fill();
+  }
+
+  if (hover != null) {   // crosshair and readout at the pointer
+    const tAt = tEnd - (1 - (hover - pad.l) / (w - pad.l - pad.r)) * span;
+    let row = shown[0];
+    for (const r of shown) if (Math.abs(r[0] - tAt) < Math.abs(row[0] - tAt)) row = r;
+    const px = X(row[0]);
+    x.strokeStyle = muted; x.lineWidth = 1; x.beginPath(); x.moveTo(px, pad.t); x.lineTo(px, h - pad.b); x.stroke();
+    const items = series.filter(k => !hidden.has(k) && row[cols[k]] != null);
+    const bw = 190, bh = 26 + items.length * 20, bx = px + 14 + bw > w ? px - 14 - bw : px + 14, by = pad.t + 6;
+    x.fillStyle = css("--bg"); x.globalAlpha = 0.94; x.fillRect(bx, by, bw, bh); x.globalAlpha = 1;
+    x.strokeStyle = line; x.strokeRect(bx, by, bw, bh);
+    x.fillStyle = muted; x.fillText(`${Math.round((tEnd - row[0]) / 6) / 10} min ago`, bx + 10, by + 18);
+    items.forEach((k, i) => {
+      x.fillStyle = css(CVAR[k]); x.fillRect(bx + 10, by + 30 + i * 20, 10, 3);
+      x.fillStyle = ink; x.fillText(`${NAMES[k]}: ${Math.round(row[cols[k]])}%`, bx + 28, by + 35 + i * 20);
+    });
+  }
+}
+$("chart").addEventListener("mousemove", e => { hover = e.offsetX; drawChart(); });
+$("chart").addEventListener("mouseleave", () => { hover = null; drawChart(); });
+window.addEventListener("resize", () => last && drawChart());
 
 // ---------- render ----------
 function render(d) {
@@ -456,16 +694,19 @@ function render(d) {
   if (mode === "sim") {
     const s = d.sim;
     if (!s.state) {
-      setStatus("Stale", "Choose a scenario at the top and press Start.", null, "Simulation");
-      tiles(null); scene("Stale", null, false);
+      setStatus("Stale", "Choose a scenario at the top and press Start.", null, "Simulation", []);
+      updateTiles(null); scene("Stale", null, false, false);
       $("bubble").setAttribute("visibility", "hidden");
-      return;
+      return drawChart();
     }
     const h = headline(s.state);
-    const meta = `${s.scenario.replace("_", " ")} on ${NAMES[s.gas].toLowerCase()}, minute ${Math.floor(s.t / 60)} of ${s.duration / 60}${s.running ? "" : ", finished"}`;
-    setStatus(s.state.site_status, h.why, h.eta, meta);
-    tiles(s.state, s.history);
-    return scene(s.state.site_status, s.state, s.running);
+    const meta = `${s.scenario.replace("_", " ")} on ${NAMES[s.gas].toLowerCase()}`;
+    setStatus(s.state.site_status, h.why, h.eta, meta,
+      [`Minute ${Math.floor(s.t / 60)} of ${s.duration / 60}`, `${s.speed}x speed`, s.running ? "Running" : "Finished"]);
+    updateTiles(s.state, s.history);
+    scene(s.state.site_status, s.state, s.running, s.t !== lastSimT);
+    lastSimT = s.t;
+    return drawChart();
   }
 
   const L = d.live, st = L.state;
@@ -480,18 +721,20 @@ function render(d) {
     $(id).disabled = !d.links.usb;
     $(id).title = d.links.usb ? "" : "Works when the box is connected by USB cable";
   }
-
   if (!st) {
-    setStatus("Stale", "Waiting for the sensor box. Check its power, the USB cable or the radio.", null, "");
-    tiles(null);
-    return scene("Stale", null, false);
+    setStatus("Stale", "Waiting for the sensor box. Check its power, the USB cable or the radio.", null, "", []);
+    updateTiles(null); scene("Stale", null, false, false);
+    return drawChart();
   }
-  const learning = st.learning || {};
-  const meta = `${L.lines} readings, ${L.lost} lost`;
-  if (stale) setStatus("Stale", `No reading for ${Math.round(L.age_s)} seconds. Check the box power and cable. The box still sounds its own alarm.`, null, meta);
-  else { const h = headline(st); setStatus(st.site_status, h.why, h.eta, meta); }
-  tiles(st, L.history, k => ({ learning: learning[k], phase: st.gases[k]?.phase }));
-  scene(stale ? "Stale" : st.site_status, st, !stale);
+  const learning = st.learning || {}, b = st.box;
+  const facts = [`${L.lines} readings`, `${L.lost} lost`, `Box on for ${Math.floor(b.uptime_s / 3600)} h ${Math.floor(b.uptime_s / 60) % 60} min`,
+    b.alarm ? "Box alarm sounding" : "Box alarm quiet"].concat(b.muted ? ["Buzzer muted"] : []);
+  if (stale) setStatus("Stale", `No reading for ${Math.round(L.age_s)} seconds. Check the box power and cable. The box still sounds its own alarm.`, null, "", facts);
+  else { const h = headline(st); setStatus(st.site_status, h.why, h.eta, "", facts); }
+  updateTiles(st, L.history, k => ({ learning: learning[k], phase: st.gases[k]?.phase }));
+  scene(stale ? "Stale" : st.site_status, st, !stale, L.lines !== lastLines);
+  lastLines = L.lines;
+  drawChart();
 }
 
 async function tick() {
@@ -499,8 +742,8 @@ async function tick() {
     const r = await fetch("/api/state", { cache: "no-store" });
     render(await r.json());
   } catch {
-    setStatus("Stale", "The receiver program is not responding. Restart it on the Pi or laptop.", null, "");
-    scene("Stale", null, false);
+    setStatus("Stale", "The receiver program is not responding. Restart it on the Pi or laptop.", null, "", []);
+    scene("Stale", null, false, false);
   }
 }
 setMode(mode);
