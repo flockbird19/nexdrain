@@ -6,6 +6,7 @@ Use it to test the receiver and dashboard before the hardware is ready, and as a
     python gateway/fake_box.py --test         (checks the line format round-trips)
 """
 import argparse
+import collections
 import random
 import sys
 import time
@@ -50,6 +51,12 @@ def main():
         live.feed(line(20, 900, 700, "L", 10, 50.0), "usb")
         live.feed(line(0, 900, 700, "L", 10, 50.0), "usb")   # reboot: seq and uptime back to 0
         assert live.lines == 6 and live.last_seq == 0, (live.lines, live.last_seq)
+        assert [e["status"] for e in live.events] == ["Safe"] and live.events[0]["acked"]   # start logged, no alert
+        import receiver as rc
+        ev = collections.deque()
+        r = {"site_status": "Imminent", "gas_results": {"CH4": {"status": "Imminent", "pct_of_threshold": 61.0}}, "level": None}
+        assert rc.note_event(ev, "Safe", r, 5) == "Imminent" and ev[0]["cause"] == "CH4" and not ev[0]["acked"]
+        assert rc.note_event(ev, "Imminent", r, 6) == "Imminent" and len(ev) == 1                # no change, no event
         live.db.close()
         print("fake_box self-check OK")
         return

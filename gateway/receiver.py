@@ -107,6 +107,20 @@ def level_view(lv):
                    "eta": lv["eta_label"], "reason": lv["reason"], "held": lv["held"]}
 
 
+def note_event(events, prev, r, t):
+    """Log a change of site status (when, from, to, and which reading caused it). Returns the new status."""
+    s = r["site_status"]
+    if s == prev:
+        return s
+    cause = None if s == "Safe" else next((g for g, x in r["gas_results"].items() if x["status"] == s), None)
+    if cause is None and r["level"] and r["level"]["status"] == s:
+        cause = "Level"
+    pct = r["level"]["fill_pct"] if cause == "Level" else r["gas_results"][cause]["pct_of_threshold"] if cause else None
+    events.append({"t": round(t, 1), "status": s, "prev": prev, "cause": cause,
+                   "pct": None if pct is None else round(pct, 1), "acked": s == "Safe" or prev is None})
+    return s
+
+
 class Live:
     """The real box: one aggregator for the gases that are actually fitted."""
 
@@ -124,6 +138,7 @@ class Live:
         self.agg.coordinators["CO"].heater_cycle = None
         self.state, self.last_rx, self.last_seq, self.lines, self.lost = None, None, None, 0, 0
         self.history = collections.deque(maxlen=600)
+        self.events, self.prev_status = collections.deque(maxlen=200), None
 
     def feed(self, line: str, source: str, rssi=None, snr=None):
         p = parse_line(line)
@@ -144,6 +159,7 @@ class Live:
                     "CO": None if p["co_phase"] == "H" else self.conv.ppm("CO", p["co"])}
         r = self.agg.process_readings(readings, now, level_cm=p["dist"])
         g = r["gas_results"]
+        self.prev_status = note_event(self.events, self.prev_status, r, now)
         self.state = {
             "site_status": r["site_status"], "master_status": r["master_status"],
             "multi_gas": r["multi_gas_pattern"],
@@ -158,14 +174,14 @@ class Live:
             "learning": self.conv.learning(),
         }
         self.history.append([round(now, 1), g["CH4"]["pct_of_threshold"], g["CO"]["pct_of_threshold"],
-                             r["level"]["fill_pct"] if r["level"] else None])
+                             r["level"]["fill_pct"] if r["level"] else None, rssi])
         self.db.execute("INSERT INTO readings VALUES (?,?,?,?)", (now, source, line.strip(), r["site_status"]))
         self.db.commit()
 
     def view(self):
         age = None if self.last_rx is None else round(time.time() - self.last_rx, 1)
         return {"state": self.state, "age_s": age, "lines": self.lines, "lost": self.lost,
-                "history": list(self.history)}
+                "history": list(self.history), "events": list(self.events)}
 
 
 class Sim:
@@ -176,6 +192,7 @@ class Sim:
     def __init__(self):
         self.thread, self.stop_flag, self.view_state = None, threading.Event(), {"running": False}
         self.history = collections.deque(maxlen=900)
+        self.events = collections.deque(maxlen=200)
 
     def start(self, scenario: str, gas: str, speed: float):
         if scenario not in self.SCENARIOS or gas not in ALL_GASES or not 0.5 <= speed <= 50:
@@ -197,6 +214,7 @@ class Sim:
                   for g in ALL_GASES}
         agg = MultiGasAggregator(config.GAS_CONFIGS, level_monitor=LevelMonitor(self.EMPTY_CM, self.FULL_CM))
         self.history = collections.deque(maxlen=900)
+        self.events, prev = collections.deque(maxlen=200), None
         t0, critical_ticks = time.time(), 0
         for t in range(duration):
             if stop.is_set():
@@ -205,6 +223,7 @@ class Sim:
             dist = self.EMPTY_CM - min(fill, 100) / 100 * (self.EMPTY_CM - self.FULL_CM)
             r = agg.process_readings({g: float(series[g][t]) for g in ALL_GASES}, t0 + t, level_cm=dist)
             res = r["gas_results"]
+            prev = note_event(self.events, prev, r, t)
             self.history.append([t] + [round(res[g]["pct_of_threshold"], 1) for g in ALL_GASES]
                                 + [round(r["level"]["fill_pct"], 1)])
             self.view_state = {
@@ -221,7 +240,7 @@ class Sim:
         self.view_state = {**self.view_state, "running": False, "finished": True}
 
     def view(self):
-        return {**self.view_state, "history": list(self.history)}
+        return {**self.view_state, "history": list(self.history), "events": list(self.events)}
 
 
 class App:
@@ -324,7 +343,8 @@ class App:
                     with app.lock:
                         live = app.live.view()
                     return self._json({"now": time.time(), "live": live, "sim": app.sim.view(),
-                                       "links": {"usb": app.ser is not None, "lora": app.lora_ok}})
+                                       "links": {"usb": app.ser is not None, "lora": app.lora_ok},
+                                       "config": {"empty_cm": app.args.empty_cm, "full_cm": app.args.full_cm}})
                 return super().do_GET()
 
             def do_POST(self):
@@ -340,6 +360,10 @@ class App:
                         app.sim.stop()
                     elif self.path == "/api/box" and body.get("cmd") in ("M", "U", "T"):
                         app.send(body["cmd"])
+                    elif self.path == "/api/ack":   # supervisor acknowledges every open alert
+                        with app.lock:
+                            for e in (app.sim if body.get("mode") == "sim" else app.live).events:
+                                e["acked"] = True
                     elif self.path == "/api/relearn":
                         with app.lock:
                             app.live.conv.relearn()
