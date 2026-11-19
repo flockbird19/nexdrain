@@ -73,7 +73,7 @@ Open `#sim` on the dashboard for Simulation mode: generated leaks run through th
 | `gateway/receiver.py` | Reads the box over USB, LoRa or stdin, estimates ppm, runs the detection, stores to SQLite, serves the API and dashboard |
 | `gateway/sx1278.py` | Receive-only driver for the Ra-02 (SX1278) on the Pi's SPI pins |
 | `gateway/fake_box.py`, `gateway/lora_check.py`, `gateway/run.sh` | Pretend box for testing, first radio test, start script for the Pi |
-| `dashboard/` | Offline dashboard: tank view, sensor tiles, 10-minute chart, Live and Simulation modes |
+| `dashboard/` | Offline dashboard: tank view, analytics, alerts and activity log, device health; roles (supervisor, technician, worker); work cycle (cleaning permit, crew check-ins, supervisor messages, maintenance mode); Live and Simulation modes |
 
 ## Safety note
 
