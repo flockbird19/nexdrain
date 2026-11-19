@@ -24,6 +24,7 @@ class SX1278:
         if version != 0x12:
             self.spi.close()
             raise RuntimeError(f"no SX1278 found (version register 0x{version:02X}, expected 0x12)")
+        self.write(0x01, 0x00)                      # sleep (the LoRa bit can only change in sleep)
         self.write(0x01, 0x80)                      # sleep + LoRa mode
         frf = int(FREQ_HZ * 2**19 / 32e6)
         self.write(0x06, frf >> 16); self.write(0x07, (frf >> 8) & 0xFF); self.write(0x08, frf & 0xFF)
