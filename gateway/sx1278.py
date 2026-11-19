@@ -14,6 +14,7 @@ RST_GPIO = 22
 
 class SX1278:
     def __init__(self, bus=0, cs=0):
+        self.crc_errors = 0
         self._reset()
         self.spi = spidev.SpiDev()
         self.spi.open(bus, cs)
@@ -21,6 +22,7 @@ class SX1278:
         self.spi.mode = 0
         version = self.read(0x42)
         if version != 0x12:
+            self.spi.close()
             raise RuntimeError(f"no SX1278 found (version register 0x{version:02X}, expected 0x12)")
         self.write(0x01, 0x80)                      # sleep + LoRa mode
         frf = int(FREQ_HZ * 2**19 / 32e6)
@@ -60,6 +62,7 @@ class SX1278:
             return None
         self.write(0x12, 0xFF)                      # clear IRQs
         if flags & 0x20:                            # CRC error: drop it
+            self.crc_errors += 1
             return None
         n = self.read(0x13)
         self.write(0x0D, self.read(0x10))           # FIFO pointer to start of this packet

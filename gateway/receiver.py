@@ -131,9 +131,13 @@ class Live:
             return
         now = time.time()
         step = 5 if source == "lora" else 1
-        if self.last_seq is not None and p["seq"] > self.last_seq:
-            self.lost += max(0, (p["seq"] - self.last_seq) // step - 1)
-        self.last_seq, self.last_rx = p["seq"], now
+        if self.last_seq is not None:
+            rebooted = p["uptime"] < self.last_uptime - 5   # box uptime went back: it restarted, accept
+            if not rebooted and p["seq"] <= self.last_seq:
+                return  # already have this reading: the box sends the same line over USB and LoRa
+            if not rebooted:
+                self.lost += max(0, (p["seq"] - self.last_seq) // step - 1)
+        self.last_seq, self.last_uptime, self.last_rx = p["seq"], p["uptime"], now
         self.lines += 1
 
         readings = {"CH4": self.conv.ppm("CH4", p["ch4"]),
@@ -263,21 +267,25 @@ class App:
             time.sleep(2)
 
     def lora_loop(self):
-        try:
-            from sx1278 import SX1278
-            radio = SX1278()
-        except Exception as e:
-            print(f"# lora: not available ({e})", flush=True)
-            return
-        self.lora_ok = True
-        print("# lora: listening on 433.5 MHz SF9 BW125", flush=True)
-        while True:
-            pkt = radio.receive()
-            if pkt:
-                data, rssi, snr = pkt
-                self.feed(data.decode(errors="replace"), "lora", rssi=rssi, snr=snr)
-            else:
-                time.sleep(0.05)
+        from sx1278 import SX1278
+        print("# lora: waiting for the Ra-02 (retries every 5 s)", flush=True)
+        while True:   # retry forever: the Ra-02 may be plugged in after start, or glitch mid-demo
+            try:
+                radio = SX1278()
+                self.lora_ok = True
+                print("# lora: listening on 433.5 MHz SF9 BW125", flush=True)
+                while True:
+                    pkt = radio.receive()
+                    if pkt:
+                        data, rssi, snr = pkt
+                        self.feed(data.decode(errors="replace"), "lora", rssi=rssi, snr=snr)
+                    else:
+                        time.sleep(0.05)
+            except Exception as e:
+                if self.lora_ok:
+                    print(f"# lora: error, retrying ({e})", flush=True)
+                self.lora_ok = False
+                time.sleep(5)
 
     def stdin_loop(self):
         for line in sys.stdin:
@@ -360,6 +368,7 @@ class App:
 
 
 def main():
+    global DATA
     ap = argparse.ArgumentParser(description="NEXDRAIN receiver")
     ap.add_argument("--serial", default="auto", help="auto, off, or a port such as /dev/ttyUSB0 or COM5")
     ap.add_argument("--no-serial", dest="serial", action="store_const", const="off")
@@ -369,8 +378,10 @@ def main():
     ap.add_argument("--full-cm", type=float, default=25.0, help="level sensor reading when the tank is full")
     ap.add_argument("--host", default="0.0.0.0")
     ap.add_argument("--port", type=int, default=8600)
+    ap.add_argument("--data-dir", type=Path, default=DATA, help="database and clean-air baseline (use a separate one for tests)")
     args = ap.parse_args()
-    DATA.mkdir(exist_ok=True)
+    DATA = args.data_dir
+    DATA.mkdir(parents=True, exist_ok=True)
     sys.path.insert(0, str(Path(__file__).parent))
     App(args).run()
 

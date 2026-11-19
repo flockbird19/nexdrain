@@ -35,6 +35,22 @@ def main():
         assert parse_line(line(7, 1620, 980, "L", 37, 143.2).replace("1620", "1621")) is None  # bad checksum
         assert parse_line("# NEXDRAIN box 1") is None
         assert line(1834, 1620, 980, "L", 37, 143.2).endswith("*71")  # matches the brief's example
+
+        # Same reading over USB and LoRa is counted once; gaps count as lost; a reboot (seq back to 0) is accepted.
+        import tempfile
+        import types
+        import receiver
+        receiver.DATA = Path(tempfile.mkdtemp())
+        live = receiver.Live(types.SimpleNamespace(empty_cm=60.0, full_cm=25.0))
+        for s, src in ((0, "usb"), (1, "usb"), (1, "lora"), (2, "usb")):
+            live.feed(line(s, 900, 700, "L", 10, 50.0), src)
+        assert (live.lines, live.lost) == (3, 0), (live.lines, live.lost)
+        live.feed(line(5, 900, 700, "L", 10, 50.0), "usb")
+        assert live.lost == 2, live.lost
+        live.feed(line(20, 900, 700, "L", 10, 50.0), "usb")
+        live.feed(line(0, 900, 700, "L", 10, 50.0), "usb")   # reboot: seq and uptime back to 0
+        assert live.lines == 6 and live.last_seq == 0, (live.lines, live.last_seq)
+        live.db.close()
         print("fake_box self-check OK")
         return
 
