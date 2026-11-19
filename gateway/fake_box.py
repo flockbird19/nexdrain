@@ -58,6 +58,32 @@ def main():
         assert rc.note_event(ev, "Safe", r, 5) == "Imminent" and ev[0]["cause"] == "CH4" and not ev[0]["acked"]
         assert rc.note_event(ev, "Imminent", r, 6) == "Imminent" and len(ev) == 1                # no change, no event
         live.db.close()
+
+        # Work cycle: permit rules, auto-evacuate, missed check-in, maintenance silencing.
+        ops = rc.Ops(receiver.DATA / "checks.json")
+        def refused(*a):
+            try:
+                ops.act(*a)
+            except ValueError:
+                return True
+        assert refused("start_cleaning", {"checks": rc.ENTRY_CHECKS[:-1]}, "supervisor", "Safe")   # a check missing
+        assert refused("start_cleaning", {"checks": rc.ENTRY_CHECKS}, "supervisor", "Imminent")     # gas not safe
+        ops.act("start_cleaning", {"checks": rc.ENTRY_CHECKS, "checkin_min": 1}, "supervisor", "Safe")
+        ops.act("enter", {"name": "Ravi"}, "worker", "Safe")
+        assert refused("end_cleaning", {}, "supervisor", "Safe")                                    # Ravi still inside
+        ops.watch("Imminent", [])
+        assert ops.msgs[-1]["kind"] == "evacuate" and not ops.msgs[-1]["up"]
+        ops.watch("Imminent", [])
+        assert len(ops.msgs) == 1                                                                  # sent once, not every second
+        ops.last_checkin -= 120
+        ops.watch("Safe", [])
+        assert ops.msgs[-1]["kind"] == "missed" and ops.msgs[-1]["up"]
+        ops.act("exit", {"name": "Ravi"}, "worker", "Safe")
+        ops.act("end_cleaning", {}, "supervisor", "Safe")
+        ops.act("start_maint", {"minutes": 5}, "technician", None)
+        e = {"status": "Critical", "acked": False}
+        ops.watch(None, [e])
+        assert e["acked"] and e["suppressed"]                                                      # no alarm during servicing
         print("fake_box self-check OK")
         return
 

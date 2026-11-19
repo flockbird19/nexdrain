@@ -38,6 +38,13 @@
 
 <div class="ambient s-Stale" id="ambient" aria-hidden="true"><i class="b1"></i><i class="b2"></i><i class="b3"></i><i class="b4"></i></div>
 <div class="toasts" id="toasts" aria-live="polite"></div>
+<div class="takeover s-Stale" id="takeover" role="alertdialog" aria-modal="true" aria-labelledby="to-text" hidden>
+  <div class="to-in">
+    <span class="to-from" id="to-from"></span>
+    <p class="to-text" id="to-text"></p>
+    <button class="btn okbig" id="to-ok" type="button">Got it</button>
+  </div>
+</div>
 
 <div class="wrap">
 <header class="top glass">
@@ -54,6 +61,7 @@
   </a>
   <nav class="nav" id="nav" aria-label="Sections">
     <a href="#overview" data-v="overview">Overview</a>
+    <a href="#work" data-v="work">Work<span class="badge" id="badge-w" hidden></span></a>
     <a href="#analytics" data-v="analytics">Analytics</a>
     <a href="#alerts" data-v="alerts">Alerts<span class="badge" id="badge" hidden></span></a>
     <a href="#device" data-v="device">Device</a>
@@ -72,6 +80,11 @@
   </select>
   <button class="btn icon theme" id="theme" type="button" aria-label="Switch light or dark"><i aria-hidden="true"></i></button>
 </header>
+
+<div class="modebar glass" id="modebar" hidden aria-live="polite">
+  <span class="mb-tag" id="mb-tag"></span><span class="mb-t" id="mb-t"></span>
+  <a class="btn" href="#work" id="mb-go">Open work</a>
+</div>
 
 <div class="simbar glass sim-only">
   <span class="simpill">SIMULATED DATA</span>
@@ -203,6 +216,76 @@
   </div>
 </section>
 
+<!-- ===== Work: permit, crew, maintenance ===== -->
+<section class="view" id="v-work" aria-label="Work">
+  <div class="head">
+    <div><h1>Work</h1><p>Run the site's work cycle: open a cleaning permit, see who is inside, and talk to the crew at the tank.</p></div>
+    <div class="modes" id="modes" role="status" aria-label="Site mode"><span data-m="normal">Normal</span><span data-m="cleaning">Cleaning</span><span data-m="maintenance">Maintenance</span></div>
+  </div>
+  <div class="workgrid">
+    <div class="wcol">
+      <form class="card glass" id="permit-form" hidden>
+        <h3>Start a cleaning permit</h3>
+        <p class="sub">Opens the tank for work. NEXDRAIN keeps watching the air and tells the crew to get out if it changes.</p>
+        <div class="fields">
+          <label>Task<select id="pf-task"><option>Wet well cleaning</option><option>Desludging</option><option>Pump or valve repair</option><option>Bar screen cleaning</option><option>Inspection</option></select></label>
+          <label>Attendant at the opening<input id="pf-att" maxlength="40" placeholder="Name" autocomplete="off"></label>
+          <label>Time limit inside<select id="pf-max"><option value="15">15 min</option><option value="30" selected>30 min</option><option value="45">45 min</option><option value="60">60 min</option></select></label>
+          <label>Crew checks in every<select id="pf-ci"><option value="1">1 min (demo)</option><option value="2">2 min</option><option value="5" selected>5 min</option><option value="10">10 min</option></select></label>
+        </div>
+        <fieldset class="checks" id="pf-checks"><legend>Before anyone goes in</legend>
+          <label><input type="checkbox" value="vent"> Lid open and the tank ventilated</label>
+          <label><input type="checkbox" value="test"> Air tested with a certified portable gas detector</label>
+          <label><input type="checkbox" value="attendant"> Attendant stays at the opening the whole time</label>
+          <label><input type="checkbox" value="harness"> Harness, lifeline and tripod fitted</label>
+          <label><input type="checkbox" value="ppe"> Breathing protection, gloves and boots on</label>
+          <label><input type="checkbox" value="rescue"> Rescue plan ready, nearest hospital number at hand</label>
+        </fieldset>
+        <div class="form-foot"><span class="sub" id="pf-why"></span><button class="btn primary" id="pf-go" type="submit">Start cleaning</button></div>
+      </form>
+
+      <form class="card glass" id="maint-form" hidden>
+        <h3>Start maintenance</h3>
+        <p class="sub">Pauses alarm sounds while the box is serviced. Readings are still logged, and the alarms come back on by themselves when the time runs out.</p>
+        <div class="fields">
+          <label>Work<select id="mf-reason"><option>Cleaning the sensors</option><option>Gas test with a known source</option><option>Battery or power work</option><option>Radio or antenna work</option><option>Firmware update</option></select></label>
+          <label>For<select id="mf-min"><option value="15">15 min</option><option value="30" selected>30 min</option><option value="60">60 min</option><option value="120">2 hours</option></select></label>
+        </div>
+        <div class="form-foot"><span class="sub">The worker screen says not to rely on it until maintenance ends.</span><button class="btn primary" type="submit">Start maintenance</button></div>
+      </form>
+
+      <article class="card glass" id="idle-card" hidden>
+        <h3>No work in progress</h3>
+        <p class="sub" id="idle-t"></p>
+      </article>
+
+      <article class="card glass" id="permit-card" hidden>
+        <div class="card-top"><h3>Cleaning permit</h3><span class="pill" id="pc-air"></span></div>
+        <dl class="kv" id="pc-kv"></dl>
+        <h3 class="mt">Inside the tank</h3>
+        <div class="people" id="pc-people"></div>
+        <div class="btns"><button class="btn" id="pc-end" type="button">Close the permit</button></div>
+      </article>
+
+      <article class="card glass" id="maint-card" hidden>
+        <div class="card-top"><h3>Maintenance</h3><span class="pill s-EarlyWarning"><span class="shape" aria-hidden="true"></span>Alarm sounds paused</span></div>
+        <dl class="kv" id="mc-kv"></dl>
+        <div class="btns"><button class="btn primary" id="mc-end" type="button">End maintenance</button></div>
+      </article>
+    </div>
+
+    <article class="card glass" id="talk">
+      <h3>Talk to the crew</h3>
+      <p class="sub" id="talk-sub">Your message fills the worker's screen until they tap "Got it". You see when it was seen.</p>
+      <div class="presets" id="presets"></div>
+      <form class="row-form" id="msg-form"><label class="sr" for="msg-t">Message</label><input id="msg-t" maxlength="160" placeholder="Type a message for the crew" autocomplete="off"><button class="btn primary" type="submit">Send</button></form>
+      <div id="requests"></div>
+      <h3 class="mt">Messages</h3>
+      <ol class="msgs" id="msgs"></ol>
+    </article>
+  </div>
+</section>
+
 <!-- ===== Worker: entry check ===== -->
 <section class="view" id="v-entry" aria-label="Entry check">
   <div class="entry glass s-Stale" id="entry-card">
@@ -218,6 +301,15 @@
       </ul>
       <p class="sub sim-only">SIMULATED DATA</p>
     </div>
+  </div>
+  <div class="crew glass" id="crew">
+    <p class="crew-mode" id="crew-mode"></p>
+    <div class="crew-clean" id="crew-clean" hidden>
+      <button class="btn okbig" id="checkin" type="button">All OK<small id="ci-due"></small></button>
+      <div class="people" id="inside"></div>
+      <form class="row-form" id="in-form"><label class="sr" for="in-name">Name of the person going in</label><input id="in-name" maxlength="40" placeholder="Name of the person going in" autocomplete="off"><button class="btn primary" type="submit">Going in</button></form>
+    </div>
+    <button class="btn sos" id="sos" type="button">Need help</button>
   </div>
 </section>
 
@@ -241,14 +333,22 @@
 
 <!-- ===== Alerts ===== -->
 <section class="view" id="v-alerts" aria-label="Alerts">
+  <p class="print-only" id="print-h"></p>
   <div class="head">
-    <div><h1>Alerts</h1><p>Every change in tank status, newest first. Warnings stay open until a supervisor acknowledges them.</p></div>
+    <div><h1>Alerts and log</h1><p>Every change in tank status and everything people did, newest first. Warnings stay open until a supervisor acknowledges them.</p></div>
     <div class="ctl">
       <label class="toggle"><input type="checkbox" id="sound" checked> Alarm sound on this screen</label>
       <button class="btn primary" id="ack" type="button">Acknowledge all</button>
     </div>
   </div>
-  <div class="alerts glass" id="alert-list"></div>
+  <div class="alertgrid">
+    <div class="alerts glass" id="alert-list"></div>
+    <article class="card glass">
+      <div class="card-top"><h3>Activity log</h3><button class="btn" id="print" type="button">Print shift report</button></div>
+      <form class="row-form" id="ho-form"><label class="sr" for="ho-t">Handover note</label><input id="ho-t" maxlength="500" placeholder="Handover note for the next shift" autocomplete="off"><button class="btn" type="submit">Add</button></form>
+      <ol class="log" id="log"></ol>
+    </article>
+  </div>
 </section>
 
 <!-- ===== Device ===== -->
@@ -267,6 +367,11 @@
     <article class="step glass" style="--i:2"><span class="n">3</span><h3>Predict</h3><p>Statistical trend detection, not AI: it smooths each reading, measures how fast it is rising, and needs several readings to agree before it warns.</p></article>
     <article class="step glass" style="--i:3"><span class="n">4</span><h3>Warn</h3><p>The supervisor sees the tank status and a time-to-danger range. The worker at the lid sees one plain instruction: open, or do not open.</p></article>
   </div>
+  <div class="cycle">
+    <div class="glass"><span class="mode-k">Normal</span><p>The box watches the closed tank. Nobody goes in. The supervisor sees the tank status and the time to danger.</p></div>
+    <div class="glass"><span class="mode-k">Cleaning</span><p>The supervisor opens a permit after six checks. The attendant logs each person in and out, the crew taps "All OK" on a timer, and NEXDRAIN orders everyone out if the air changes.</p></div>
+    <div class="glass"><span class="mode-k">Maintenance</span><p>The technician services the box. Alarm sounds pause for a fixed time only, every reading is still logged, and the worker screen says not to rely on it.</p></div>
+  </div>
   <div class="truth">
     <div class="glass">
       <h3>Tested in simulation</h3>
@@ -281,10 +386,10 @@
     </div>
     <div class="glass">
       <h3>The pilot box adds</h3>
-      <ul><li><b>Hydrogen sulphide</b> (industrial sensor)</li><li><b>Oxygen</b></li><li>SMS alerts to the supervisor</li><li>Several tanks per site</li></ul>
+      <ul><li><b>Hydrogen sulphide</b> (industrial sensor)</li><li><b>Oxygen</b></li><li>SMS alerts to the supervisor</li><li>A login per person (the prototype picks the role on screen)</li><li>Several tanks per site</li></ul>
     </div>
   </div>
-  <p class="keys">Keys: <kbd>1</kbd> to <kbd>5</kbd> switch sections, <kbd>L</kbd> live, <kbd>S</kbd> simulation, <kbd>F</kbd> full screen.</p>
+  <p class="keys">Keys: <kbd>1</kbd> to <kbd>6</kbd> switch sections, <kbd>L</kbd> live, <kbd>S</kbd> simulation, <kbd>F</kbd> full screen.</p>
 </section>
 
 </main>

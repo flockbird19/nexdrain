@@ -8,8 +8,13 @@ const GASES = ["H2S", "CH4", "CO", "NH3", "O2"];
 const COLS = { live: { CH4: 1, CO: 2, Level: 3, Rssi: 4 }, sim: { H2S: 1, CH4: 2, CO: 3, NH3: 4, Level: 5 } };  // history columns
 const CVAR = { H2S: "--c-h2s", CH4: "--c-ch4", CO: "--c-co", NH3: "--c-nh3", Level: "--c-lvl" };
 const RANK = { Safe: 0, "Early Warning": 1, Imminent: 2, Critical: 3 };
-const VIEWS = ["overview", "analytics", "alerts", "device", "about"];
-const ROLES = { supervisor: ["overview", "analytics", "alerts", "about"], technician: VIEWS, worker: ["entry"] };
+const VIEWS = ["overview", "work", "analytics", "alerts", "device", "about"];
+const ROLES = { supervisor: ["overview", "work", "analytics", "alerts", "about"], technician: VIEWS, worker: ["entry"] };
+const WHO = { supervisor: "Supervisor", technician: "Technician", worker: "Crew", system: "NEXDRAIN" };
+const KIND = { evacuate: ["Evacuate", "s-Critical"], limit: ["Time limit", "s-Imminent"], stop: ["Stop work", "s-EarlyWarning"], break: ["Break", "s-EarlyWarning"],
+  resume: ["Resume work", "s-Safe"], clear: ["All clear", "s-Safe"], text: ["Message", "s-Stale"], sos: ["Help needed", "s-Critical"], missed: ["Missed check-in", "s-Imminent"] };
+const PRESETS = [["evacuate", "Evacuate now. Leave the tank immediately."], ["stop", "Stop work and wait at the opening."], ["break", "Come out for a break."],
+  ["resume", "Air is normal. You may carry on."], ["clear", "All clear. Work is finished, close the lid."]];
 const FLOOR_Y = 604, FULL_Y = 262, WINDOW_S = 600;
 const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
 
@@ -28,12 +33,23 @@ if (mode !== "sim") mode = "live";
 let role = ROLES[params.get("role")] ? params.get("role") : ROLES[pref("nx-role")] ? pref("nx-role") : "supervisor";
 let view = "overview";
 let last = null, lastLines = -1, lastSimT = -1, lastWord = "", hidden = new Set(), hover = null, seenEvents = null;
+let msgSeen = null, keys = {};   // keys: last-drawn content of lists that are rebuilt only when they change
+
+const clock = t => new Date(t * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+const mmss = s => { s = Math.max(0, Math.round(s)); return Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0"); };
 
 async function post(path, body) {
   try {
     const r = await fetch(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body || {}) });
-    return r.ok;
-  } catch { return false; }
+    const j = await r.json().catch(() => ({}));
+    return { ok: r.ok, error: j.error };
+  } catch { return { ok: false, error: "The receiver is not responding" }; }
+}
+async function op(action, extra) {   // one work-cycle action; the server checks the rules and says no in plain words
+  const r = await post("/api/ops", { mode, role, action, ...extra });
+  if (!r.ok) pop("s-Critical", "Not done", r.error || "Something went wrong");
+  tick();
+  return r.ok;
 }
 
 // ---------- intro: once per browser tab; ?intro plays it again ----------
@@ -76,7 +92,7 @@ function setView(v) {
   });
   $("nav").hidden = role === "worker";
   if (location.hash !== "#" + view) history.replaceState(null, "", "#" + view);
-  lastWord = ""; alertsKey = "";
+  lastWord = ""; alertsKey = ""; keys = {};
   if (last) render(last);
 }
 addEventListener("hashchange", () => setView(location.hash.slice(1)));
@@ -88,7 +104,7 @@ function setMode(m) {
   $("tab-live").setAttribute("aria-selected", m === "live");
   $("tab-sim").setAttribute("aria-selected", m === "sim");
   $("seg").dataset.m = m;
-  tileKeys = ""; alertsKey = ""; seenEvents = null; lastWord = "";
+  tileKeys = ""; alertsKey = ""; seenEvents = null; lastWord = ""; msgSeen = null; keys = {};
   if (last) render(last);
 }
 $("tab-live").onclick = () => setMode("live");
@@ -106,7 +122,7 @@ $("sound").onchange = e => pref("nx-sound", e.target.checked ? "1" : "0");
 addEventListener("keydown", e => {
   if (e.target.closest("input, select, textarea") || e.ctrlKey || e.metaKey || e.altKey) return;
   const k = e.key.toLowerCase();
-  if (k >= "1" && k <= "5") setView(VIEWS[Number(k) - 1]);
+  if (k >= "1" && k <= "6") setView(VIEWS[Number(k) - 1]);
   else if (k === "l") setMode("live");
   else if (k === "s") setMode("sim");
   else if (k === "f") document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen?.();
@@ -187,24 +203,192 @@ function renderOverview(d, S) {
       <span class="bar"><i style="width:${Math.min(v ?? 0, 100)}%"></i></span></div>`).join("")
       + (off.length ? `<div class="mini-off">Not fitted on the prototype: ${off.map(k => NAMES[k].toLowerCase()).join(", ")}</div>` : "");
   }
-  $("acts").hidden = !openAlerts(S).length || role === "worker";
+  $("acts").hidden = !(openAlerts(S).length + openUp(d.ops[mode]).length) || role === "worker";
   scene(status, S.st, !S.stale && (mode === "live" || S.s.running), mode === "sim" ? S.s.t !== lastSimT : S.L.lines !== lastLines);
 }
 
 // ---------- worker entry check ----------
-function renderEntry(S) {
-  const status = statusOf(S);
+function renderEntry(d, S, O) {
+  const maint = O.mode === "maintenance", status = maint ? "Stale" : statusOf(S);
   $("entry-card").className = "entry glass " + cls(status);
   const h = S.st && !S.stale ? headline(S.st) : null;
-  const [word, why] = status === "Stale" ? ["No data", mode === "sim" ? "Start a simulated leak to see the worker screen." : "Do not rely on this screen. Check the sensor box."]
-    : status === "Safe" ? ["No gas warning", "Readings are normal. Still follow the entry procedure."]
+  const [word, why] = maint ? ["Box under maintenance", "Do not rely on this screen. Test the air with a portable gas detector."]
+    : status === "Stale" ? ["No data", mode === "sim" ? "Start a simulated leak to see the worker screen." : "Do not rely on this screen. Check the sensor box."]
+    : status === "Safe" ? ["No gas warning", O.mode === "cleaning" ? "Readings are normal. Keep checking in." : "Readings are normal. Still follow the entry procedure."]
     : status === "Critical" ? ["Do not enter", h.why]
     : ["Do not open the lid", h.why];
   $("entry-word").textContent = word;
   $("entry-why").textContent = why;
   $("entry-eta").hidden = !h?.eta || status === "Critical";
   $("entry-eta").textContent = h?.eta ? "Danger in " + h.eta : "";
-  $("checklist").hidden = status !== "Safe";
+  $("checklist").hidden = status !== "Safe" || O.mode !== "normal";
+  renderCrew(d, status, O);
+}
+
+// ---------- worker: crew actions at the tank ----------
+function renderCrew(d, status, O) {
+  const clean = O.mode === "cleaning";
+  $("crew-clean").hidden = !clean;
+  $("crew-mode").textContent = clean ? `Permit open: ${O.permit.task}. Attendant ${O.permit.attendant}. Time limit ${O.permit.max_min} min inside.`
+    : O.mode === "maintenance" ? "The box is being serviced. Use a portable gas detector."
+    : "No permit is open. Nobody goes in until the supervisor opens one.";
+  if (!clean) return;
+  const due = O.last_checkin + O.permit.checkin_min * 60 - d.now;
+  $("ci-due").textContent = due >= 0 ? `Next check-in in ${mmss(due)}` : `Check-in late by ${mmss(-due)}`;
+  $("checkin").classList.toggle("late", due < 0);
+  $("in-form").querySelector("button").disabled = status !== "Safe";
+  people("inside", O, d.now, true);
+}
+
+function people(id, O, now, canExit) {   // who is inside, with time against the permit's limit
+  const names = Object.keys(O.inside), lim = O.permit.max_min * 60;
+  const k = names.join("|") + canExit;
+  if (keys[id] !== k) {
+    keys[id] = k;
+    $(id).innerHTML = names.length ? names.map(n => `<div class="person" data-in="${O.inside[n]}"><b>${esc(n)}</b><span class="tin"></span>
+      <span class="bar"><i></i></span>${canExit ? `<button class="btn" type="button" data-act="exit" data-name="${esc(n)}">Came out</button>` : ""}</div>`).join("")
+      : `<p class="sub">Nobody is inside.</p>`;
+  }
+  $(id).querySelectorAll(".person").forEach(p => {
+    const s = now - Number(p.dataset.in), over = s > lim;
+    p.classList.toggle("over", over);
+    p.querySelector(".tin").textContent = `${mmss(s)} of ${O.permit.max_min}:00${over ? ", over the limit" : ""}`;
+    p.querySelector(".bar i").style.width = Math.min(100, 100 * s / lim) + "%";
+  });
+}
+
+$("checkin").onclick = () => op("checkin");
+$("sos").onclick = () => { if (confirm("Send a help request to the supervisor now?")) op("sos"); };
+$("in-form").onsubmit = async e => {
+  e.preventDefault();
+  if (await op("enter", { name: $("in-name").value })) $("in-name").value = "";
+};
+document.addEventListener("click", e => {   // buttons inside lists that are redrawn
+  const b = e.target.closest("[data-act]");
+  if (!b) return;
+  const a = b.dataset.act;
+  if (a === "exit") op("exit", { name: b.dataset.name });
+  else if (a === "resolve") op("resolve", { id: Number(b.dataset.id) });
+  else if (a === "check") op("check", { what: b.dataset.what });
+  else if (a === "msg") sendMsg(b.dataset.kind, b.dataset.text);
+});
+
+// ---------- takeover: a message from the supervisor fills the worker's screen ----------
+let shownMsg = null;
+function renderTakeover(O) {
+  const m = role === "worker" ? O.msgs.find(x => !x.up && x.done == null) : null;
+  $("takeover").hidden = !m;
+  if (!m) { shownMsg = null; return; }
+  const [ttl, c] = KIND[m.kind];
+  $("takeover").className = "takeover " + c;
+  $("to-from").textContent = `${ttl}, from ${m.from === "system" ? "NEXDRAIN" : "the " + WHO[m.from].toLowerCase()} at ${clock(m.t)}${mode === "sim" ? ". SIMULATED" : ""}`;
+  $("to-text").textContent = m.text;
+  if (shownMsg !== m.id) { shownMsg = m.id; $("to-ok").focus(); }
+  $("to-ok").onclick = () => op("seen", { id: m.id });
+}
+
+// ---------- work: permit, maintenance, messages ----------
+const openUp = O => O.msgs.filter(m => m.up && m.done == null);
+const checksTicked = () => [...$("pf-checks").querySelectorAll("input:checked")].map(i => i.value);
+
+$("presets").innerHTML = PRESETS.map(([k, t]) => `<button class="btn${k === "evacuate" ? " alarm s-Critical" : ""}" type="button" data-act="msg" data-kind="${k}" data-text="${esc(t)}">${KIND[k][0]}</button>`).join("");
+function sendMsg(kind, text) {
+  if (kind === "evacuate" && !confirm("Order everyone out of the tank now?")) return;
+  op("message", { kind, text });
+}
+$("msg-form").onsubmit = e => { e.preventDefault(); const t = $("msg-t").value.trim(); if (t) { op("message", { kind: "text", text: t }); $("msg-t").value = ""; } };
+$("pf-checks").onchange = () => last && renderWork(last, source(last), last.ops[mode]);
+$("permit-form").onsubmit = e => {
+  e.preventDefault();
+  op("start_cleaning", { task: $("pf-task").value, attendant: $("pf-att").value, max_min: Number($("pf-max").value), checkin_min: Number($("pf-ci").value), checks: checksTicked() })
+    .then(ok => ok && $("pf-checks").querySelectorAll("input").forEach(i => { i.checked = false; }));
+};
+$("maint-form").onsubmit = e => { e.preventDefault(); op("start_maint", { reason: $("mf-reason").value, minutes: Number($("mf-min").value) }); };
+$("pc-end").onclick = () => {
+  const inside = Object.keys(last?.ops[mode].inside || {});
+  if (inside.length && !confirm(`${inside.join(", ")} still logged inside. Close the permit anyway?`)) return;
+  op("end_cleaning", { force: inside.length > 0 });
+};
+$("mc-end").onclick = () => op("end_maint");
+$("ho-form").onsubmit = async e => { e.preventDefault(); if (await op("handover", { text: $("ho-t").value })) $("ho-t").value = ""; };
+$("print").onclick = () => {
+  $("print-h").textContent = `NEXDRAIN shift report, Tank 1. Printed ${new Date().toLocaleString()}.${mode === "sim" ? " SIMULATED DATA." : ""}`;
+  print();
+};
+
+const kv = rows => rows.map(([k, v]) => `<dt>${k}</dt><dd>${esc(v)}</dd>`).join("");
+function renderWork(d, S, O) {
+  $("modes").querySelectorAll("span").forEach(s => s.classList.toggle("on", s.dataset.m === O.mode));
+  const sup = role === "supervisor", tech = role === "technician", normal = O.mode === "normal";
+  $("permit-form").hidden = !(normal && sup);
+  $("maint-form").hidden = !(normal && tech);
+  $("idle-card").hidden = !(normal && !sup && !tech);
+  $("permit-card").hidden = O.mode !== "cleaning";
+  $("maint-card").hidden = O.mode !== "maintenance";
+  const status = statusOf(S);
+
+  if (normal && sup) {
+    const ticked = checksTicked().length === 6;
+    $("pf-go").disabled = status !== "Safe" || !ticked;
+    $("pf-why").textContent = status === "Stale" ? "Waiting for current readings from the box." : status !== "Safe" ? `Tank status is ${status}. Nobody goes in.`
+      : ticked ? "Readings are Safe. Ready to start." : `Tick every check to continue (${checksTicked().length} of 6).`;
+  }
+  if (O.mode === "cleaning") {
+    const p = O.permit, due = O.last_checkin + p.checkin_min * 60 - d.now;
+    $("pc-air").className = "pill " + cls(status);
+    $("pc-air").innerHTML = `<span class="shape" aria-hidden="true"></span>Air: ${status === "Stale" ? "no data" : status}`;
+    $("pc-kv").innerHTML = kv([["Task", p.task], ["Opened by", `${WHO[p.by]} at ${clock(p.start)}`], ["Open for", mmss(d.now - p.start)],
+      ["Attendant", p.attendant], ["Time limit inside", p.max_min + " min"],
+      ["Next crew check-in", !Object.keys(O.inside).length ? "starts when someone goes in" : due >= 0 ? "in " + mmss(due) : "late by " + mmss(-due)]]);
+    people("pc-people", O, d.now, sup);
+    $("pc-end").hidden = !sup;
+  }
+  if (O.mode === "maintenance") {
+    $("mc-kv").innerHTML = kv([["Work", O.maint.reason], ["Started by", `${WHO[O.maint.by]} at ${clock(O.since)}`], ["Alarms back on in", mmss(O.maint.until - d.now)]]);
+  }
+  $("idle-t").textContent = "The supervisor opens a cleaning permit from this page. The technician starts maintenance from here too.";
+
+  // talk to the crew: supervisor sends, technician reads
+  $("presets").hidden = $("msg-form").hidden = !sup;
+  $("talk-sub").textContent = sup ? `Your message fills the worker's screen until they tap "Got it". You see when it was seen.` : "Messages between the supervisor and the crew. Only the supervisor sends.";
+  const reqs = openUp(O), rk = reqs.map(m => m.id).join();
+  if (keys.req !== rk + sup) {
+    keys.req = rk + sup;
+    $("requests").innerHTML = reqs.map(m => `<div class="req ${KIND[m.kind][1]}"><span class="shape" aria-hidden="true"></span>
+      <div><b>${KIND[m.kind][0]}</b><span>${esc(m.text)}, ${clock(m.t)}</span></div>
+      ${sup ? `<button class="btn alarm" type="button" data-act="resolve" data-id="${m.id}">Responding</button>` : ""}</div>`).join("");
+  }
+  const ms = O.msgs.slice(-12).reverse(), mk = ms.map(m => m.id + ":" + m.done).join();
+  if (keys.msgs !== mk) {
+    keys.msgs = mk;
+    $("msgs").innerHTML = ms.length ? ms.map(m => `<li class="${KIND[m.kind][1]}"><span class="shape" aria-hidden="true"></span>
+      <div><b>${m.up ? "From the crew" : "To the crew"}: ${esc(m.text)}</b>
+      <span>${WHO[m.from]} at ${clock(m.t)}. ${m.done == null ? (m.up ? "Waiting for a response" : "Not seen yet") : (m.up ? "Responded at " : "Seen at ") + clock(m.done)}</span></div></li>`).join("")
+      : `<li class="s-Stale none">No messages yet.</li>`;
+  }
+}
+
+// ---------- the mode banner on every screen ----------
+function renderModebar(d, O) {
+  const on = O.mode !== "normal";
+  $("modebar").hidden = !on;
+  if (!on) return;
+  $("modebar").className = "modebar glass m-" + O.mode;
+  const n = Object.keys(O.inside).length;
+  $("mb-tag").textContent = O.mode === "cleaning" ? "CLEANING" : "MAINTENANCE";
+  $("mb-t").textContent = O.mode === "cleaning"
+    ? `${O.permit.task}. ${n ? n + (n > 1 ? " people" : " person") + " inside" : "Nobody inside yet"}. Permit open for ${mmss(d.now - O.permit.start)}.`
+    : `${O.maint.reason}. Alarm sounds paused for ${mmss(O.maint.until - d.now)} more. Readings are still logged.`;
+  $("mb-go").hidden = role === "worker" || view === "work";
+}
+
+// ---------- activity log ----------
+function renderLog(O) {
+  const lg = O.log.slice().reverse(), k = lg.length + ":" + (lg[0]?.t ?? "");
+  if (keys.log === k) return;
+  keys.log = k;
+  $("log").innerHTML = lg.length ? lg.map(e => `<li><time>${clock(e.t)}</time><span class="who">${WHO[e.who] || esc(e.who)}</span><span>${esc(e.what)}</span></li>`).join("")
+    : `<li class="none">Nothing yet. Permits, messages, check-ins and maintenance appear here.</li>`;
 }
 
 // ---------- analytics ----------
@@ -437,7 +621,7 @@ function alertText(e) {
   const what = e.cause ? NAMES[e.cause] : "Tank";
   const pct = e.pct == null ? "" : e.cause === "Level" ? `, ${Math.round(e.pct)}% full` : `, ${pctTxt(e.pct)} of danger level`;
   return e.status === "Safe" ? [`Back to Safe`, `Everything below its warning level again, after ${e.prev}.`]
-    : [`${what}: ${e.status}`, `Raised from ${e.prev}${pct}.`];
+    : [`${what}: ${e.status}`, `Raised from ${e.prev}${pct}.${e.suppressed ? " During maintenance, no alarm sounded." : ""}`];
 }
 
 let alertsKey = "";
@@ -478,25 +662,42 @@ function beep(sev) {
 }
 setInterval(() => {   // beep until someone acknowledges
   if (!last || !$("sound").checked) return;
+  const O = last.ops[mode];
+  if (role === "worker") {   // the crew's phone sounds for an order to get out until they tap "Got it"
+    const m = O.msgs.find(x => !x.up && x.done == null);
+    if (m && (m.kind === "evacuate" || m.kind === "limit")) beep("Critical");
+    return;
+  }
+  if (openUp(O).length) return beep("Critical");   // help request or missed check-in
+  if (O.mode === "maintenance") return;              // alarm sounds paused while the box is serviced
   const open = openAlerts(source(last));
   if (open.length) beep(open.reduce((a, e) => RANK[e.status] > RANK[a] ? e.status : a, "Early Warning"));
 }, 3000);
 
-function toast(e) {
-  const [ttl, wh] = alertText(e);
+function pop(c, ttl, wh) {
   const t = document.createElement("div");
-  t.className = "toast glass " + cls(e.status);
+  t.className = "toast glass " + c;
   t.innerHTML = `<span class="shape" aria-hidden="true"></span><b>${esc(ttl)}</b><span>${esc(wh)}${mode === "sim" ? " Simulated." : ""}</span>`;
   $("toasts").prepend(t);
   setTimeout(() => { t.classList.add("bye"); setTimeout(() => t.remove(), 300); }, 5000);
 }
-function checkNewEvents(S) {
+function checkNewEvents(S, O) {
   const n = S.events.length;
-  if (seenEvents != null && n > seenEvents) S.events.slice(seenEvents).forEach(e => { if (e.prev != null && RANK[e.status] > (RANK[e.prev] ?? 0)) toast(e); });
+  if (seenEvents != null && n > seenEvents && O.mode !== "maintenance" && role !== "worker")
+    S.events.slice(seenEvents).forEach(e => { if (e.prev != null && !e.suppressed && RANK[e.status] > (RANK[e.prev] ?? 0)) pop(cls(e.status), ...alertText(e)); });
   seenEvents = n;
-  const open = openAlerts(S).length;
+  const open = openAlerts(S).length, up = openUp(O).length;
   $("badge").hidden = !open;
   $("badge").textContent = open;
+  $("badge-w").hidden = !up;
+  $("badge-w").textContent = up;
+  // new help requests, and messages the crew has now seen
+  const now = new Map(O.msgs.map(m => [m.id, m.done]));
+  if (msgSeen && role !== "worker") for (const m of O.msgs) {
+    if (!msgSeen.has(m.id) && m.up) pop(KIND[m.kind][1], KIND[m.kind][0], m.text);
+    else if (!m.up && m.done != null && msgSeen.has(m.id) && msgSeen.get(m.id) == null) pop("s-Safe", "Seen by the crew", m.text);
+  }
+  msgSeen = now;
 }
 
 // ---------- device ----------
@@ -523,11 +724,15 @@ function buildDevice() {
         <div><b id="d-phase">Carbon monoxide heater</b><div class="sub" id="d-phase-s">Waiting for the box</div></div></div>
       <div class="learn" id="d-learn"></div>
       <div class="btns"><button class="btn" id="d-relearn" type="button">Relearn clean air</button></div></article>
-    <article class="dev glass span-6"><h3>Level sensor</h3>
+    <article class="dev glass span-4"><h3>Safety checks</h3>
+      <dl class="kv"><dt>Gas test with a known source</dt><dd id="d-bump">--</dd><dt>Lights and buzzer test</dt><dd id="d-alt">--</dd></dl>
+      <span class="sub">Gas detector makers advise testing the alarm with a known gas before relying on it. Record each pass here; it is due again after a day.</span>
+      <div class="btns"><button class="btn" type="button" data-act="check" data-what="bump">Record gas test</button><button class="btn" type="button" data-act="check" data-what="alarm">Record lights test</button></div></article>
+    <article class="dev glass span-4"><h3>Level sensor</h3>
       <div class="big" id="d-dist">--</div>
       <dl class="kv"><dt>Reading when the tank is empty</dt><dd id="d-empty">--</dd><dt>Reading when the tank is full</dt><dd id="d-full">--</dd></dl>
       <span class="sub">Set both at the demo table: <span class="code">run.sh --empty-cm 60 --full-cm 25</span></span></article>
-    <article class="dev glass span-6"><h3>Radio settings</h3>
+    <article class="dev glass span-4"><h3>Radio settings</h3>
       <dl class="kv"><dt>Frequency</dt><dd>433.5 MHz</dd><dt>Spreading factor</dt><dd>9</dd><dt>Bandwidth</dt><dd>125 kHz</dd><dt>Coding rate</dt><dd>4/5</dd><dt>Sync word</dt><dd>0x12</dd><dt>Transmit power</dt><dd>10 dBm, the legal limit in India</dd></dl></article>
   </div>`;
   $("d-mute").onclick = () => post("/api/box", { cmd: last?.live?.state?.box?.muted ? "U" : "M" });
@@ -577,6 +782,12 @@ function renderDevice(d, S) {
   }).join("");
   const lv = S.st?.level;
   $("d-dist").innerHTML = lv?.dist_cm != null ? `${Math.round(lv.dist_cm)}<small>cm to the surface</small>` : "--";
+  const chk = d.ops.live.checks || {};
+  for (const [id, k] of [["d-bump", "bump"], ["d-alt", "alarm"]]) {
+    const t = chk[k], age = t ? d.now - t : null;
+    $(id).innerHTML = t == null ? `<span class="pill s-EarlyWarning">Never recorded</span>`
+      : `<span class="pill ${age > 86400 ? "s-EarlyWarning" : "s-Safe"}">${age > 86400 ? "Due, last " + Math.floor(age / 86400) + " d ago" : "Passed at " + clock(t)}</span>`;
+  }
   $("d-empty").textContent = d.config ? d.config.empty_cm + " cm" : "--";
   $("d-full").textContent = d.config ? d.config.full_cm + " cm" : "--";
 }
@@ -650,11 +861,15 @@ function render(d) {
   $("sim-note").textContent = mode === "sim" && d.sim.state
     ? `${d.sim.scenario.replace("_", " ")} on ${NAMES[d.sim.gas].toLowerCase()}, ${d.sim.speed}x speed, minute ${Math.floor(d.sim.t / 60)} of ${d.sim.duration / 60}${d.sim.running ? "" : ", finished"}`
     : "Generated readings run through the same prediction software.";
-  checkNewEvents(S);
+  const O = d.ops[mode];
+  checkNewEvents(S, O);
+  renderModebar(d, O);
+  renderTakeover(O);
   if (view === "overview") renderOverview(d, S);
-  else if (view === "entry") renderEntry(S);
+  else if (view === "work") renderWork(d, S, O);
+  else if (view === "entry") renderEntry(d, S, O);
   else if (view === "analytics") renderAnalytics(d, S);
-  else if (view === "alerts") renderAlerts(S);
+  else if (view === "alerts") { renderAlerts(S); renderLog(O); }
   else if (view === "device") renderDevice(d, S);
   if (mode === "sim") lastSimT = d.sim.t; else lastLines = d.live.lines;
 }

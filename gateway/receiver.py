@@ -243,11 +243,186 @@ class Sim:
         return {**self.view_state, "history": list(self.history), "events": list(self.events)}
 
 
+ENTRY_CHECKS = ["vent", "test", "attendant", "harness", "ppe", "rescue"]   # ids match the dashboard's permit form
+DOWN_KINDS = {"evacuate", "break", "stop", "resume", "clear", "text", "limit"}
+
+
+class Ops:
+    """The work cycle at one site: normal, cleaning (an entry permit with people inside) or maintenance
+    (box being serviced, alarms paused for a fixed time). Plus supervisor <-> worker messages and an action log.
+    ponytail: kept in memory, lost on restart; the pilot stores it in the database."""
+
+    def __init__(self, checks_path: Path):
+        self.mode, self.since, self.permit, self.maint = "normal", time.time(), None, None
+        self.inside = {}                          # name -> time in
+        self.msgs = collections.deque(maxlen=100)
+        self.log = collections.deque(maxlen=300)
+        self.next_id, self.last_checkin = 1, None
+        self.auto_evac = self.missed_open = False
+        self.overtime = set()
+        self.checks_path = checks_path            # dated safety checks survive restarts
+        self.checks = json.loads(checks_path.read_text()) if checks_path.exists() else {}
+
+    def note(self, who, what):
+        self.log.append({"t": round(time.time(), 1), "who": who, "what": what})
+
+    def send(self, up, kind, text, who):
+        m = {"id": self.next_id, "t": round(time.time(), 1), "up": up, "kind": kind, "text": text[:160], "from": who, "done": None}
+        self.next_id += 1
+        self.msgs.append(m)
+        self.note(who, ("Asked for help: " if kind == "sos" else "Message: ") + m["text"] if kind != "missed" else m["text"])
+        return m
+
+    def act(self, a, b, who, status):
+        """One action from the dashboard. Raises ValueError with a plain reason when it is not allowed."""
+        now = time.time()
+        if a == "start_cleaning":
+            if self.mode != "normal":
+                raise ValueError(f"The site is already in {self.mode} mode")
+            if status != "Safe":
+                raise ValueError("Readings must be Safe and current before anyone goes in")
+            if sorted(b.get("checks") or []) != sorted(ENTRY_CHECKS):
+                raise ValueError("Tick every check before starting")
+            self.permit = {"task": str(b.get("task", "Cleaning"))[:60], "attendant": str(b.get("attendant", "")).strip()[:40] or "not named",
+                           "max_min": int(b.get("max_min", 30)), "checkin_min": int(b.get("checkin_min", 5)), "start": round(now, 1), "by": who}
+            if not (1 <= self.permit["max_min"] <= 120 and 1 <= self.permit["checkin_min"] <= 30):
+                raise ValueError("Time limits out of range")
+            self.mode, self.since, self.last_checkin = "cleaning", now, now
+            self.inside, self.overtime, self.auto_evac, self.missed_open = {}, set(), False, False
+            self.note(who, f"Started cleaning permit: {self.permit['task']}, attendant {self.permit['attendant']}, "
+                           f"{self.permit['max_min']} min limit, check-in every {self.permit['checkin_min']} min. All 6 checks ticked")
+        elif a == "end_cleaning":
+            if self.mode != "cleaning":
+                raise ValueError("No cleaning permit is open")
+            if self.inside and not b.get("force"):
+                raise ValueError("People are still inside: " + ", ".join(self.inside))
+            self.note(who, f"Closed cleaning permit after {round((now - self.permit['start']) / 60)} min" + (" with people still logged inside" if self.inside else ""))
+            self.mode, self.since, self.permit, self.inside = "normal", now, None, {}
+        elif a in ("enter", "exit"):
+            name = str(b.get("name", "")).strip()[:40]
+            if not name:
+                raise ValueError("Enter a name")
+            if a == "enter":
+                if self.mode != "cleaning":
+                    raise ValueError("Nobody goes in without an open cleaning permit")
+                if status != "Safe":
+                    raise ValueError("Readings are not Safe. Do not enter")
+                if name in self.inside:
+                    raise ValueError(f"{name} is already inside")
+                self.inside[name] = round(now, 1)
+                self.note(who, f"{name} went in")
+            else:
+                if name not in self.inside:
+                    raise ValueError(f"{name} is not logged inside")
+                self.note(who, f"{name} came out after {round((now - self.inside.pop(name)) / 60, 1)} min")
+                self.overtime.discard(name)
+        elif a == "checkin":
+            self.last_checkin, self.missed_open = now, False
+            self.note(who, "Checked in: all OK")
+        elif a == "sos":
+            self.send(True, "sos", str(b.get("text") or "Worker needs help at the tank"), who)
+        elif a == "message":
+            kind = b.get("kind")
+            if kind not in DOWN_KINDS:
+                raise ValueError("Unknown message")
+            text = str(b.get("text", "")).strip()
+            if not text:
+                raise ValueError("Write a message")
+            self.send(False, kind, text, who)
+        elif a == "seen":       # the worker taps "Got it" on a message
+            for m in self.msgs:
+                if m["id"] == b.get("id") and not m["up"] and m["done"] is None:
+                    m["done"] = round(now, 1)
+                    self.note(who, f"Saw the message: {m['text']}")
+        elif a == "resolve":    # the supervisor answers a help request or missed check-in
+            for m in self.msgs:
+                if m["up"] and m["done"] is None and (b.get("id") in (None, m["id"])):
+                    m["done"] = round(now, 1)
+                    self.note(who, f"Responded to: {m['text']}")
+        elif a == "start_maint":
+            if self.mode == "cleaning":
+                raise ValueError("Close the cleaning permit first")
+            minutes = int(b.get("minutes", 30))
+            if not 5 <= minutes <= 240:
+                raise ValueError("Maintenance lasts 5 to 240 minutes")
+            self.maint = {"reason": str(b.get("reason", "Servicing"))[:60], "until": round(now + minutes * 60, 1), "by": who}
+            self.mode, self.since = "maintenance", now
+            self.note(who, f"Started maintenance: {self.maint['reason']}. Alarms paused for {minutes} min")
+        elif a == "end_maint":
+            if self.mode != "maintenance":
+                raise ValueError("Not in maintenance")
+            self.mode, self.since, self.maint = "normal", now, None
+            self.note(who, "Ended maintenance. Alarms back on")
+        elif a == "check":      # dated safety checks, e.g. a gas test against a known source
+            what = {"bump": "Gas test with a known source", "alarm": "Lights and buzzer test"}.get(b.get("what"))
+            if not what:
+                raise ValueError("Unknown check")
+            self.checks[b["what"]] = round(now, 1)
+            self.checks_path.write_text(json.dumps(self.checks))
+            self.note(who, f"Recorded: {what} passed")
+        elif a == "handover":
+            text = str(b.get("text", "")).strip()[:500]
+            if not text:
+                raise ValueError("Write the handover note")
+            self.note(who, "Handover note: " + text)
+        else:
+            raise ValueError("Unknown action")
+
+    def watch(self, status, events):
+        """Runs every second: the automatic parts of the work cycle."""
+        now = time.time()
+        for e in events:           # alerts raised while the box is being serviced are logged but do not sound
+            if "seen" not in e:
+                e["seen"] = True
+                if self.mode == "maintenance":
+                    e["acked"] = e["suppressed"] = True
+        if self.mode == "maintenance" and now > self.maint["until"]:
+            self.mode, self.since, self.maint = "normal", now, None
+            self.note("system", "Maintenance time ran out. Alarms back on")
+        if self.mode != "cleaning":
+            return
+        bad = status is None or status != "Safe"
+        if bad and not self.auto_evac and self.inside:
+            self.auto_evac = True
+            self.send(False, "evacuate", "Evacuate now. " + ("Gas is rising in the tank." if status else "The sensor box stopped reporting."), "system")
+        if not bad:
+            self.auto_evac = False
+        if self.inside and not self.missed_open and now - self.last_checkin > self.permit["checkin_min"] * 60 + 30:
+            self.missed_open = True
+            self.send(True, "missed", f"Missed check-in: no 'All OK' for {self.permit['checkin_min']} min", "system")
+        for name, t_in in self.inside.items():
+            if name not in self.overtime and now - t_in > self.permit["max_min"] * 60:
+                self.overtime.add(name)
+                self.send(False, "limit", f"{name}: time limit of {self.permit['max_min']} min reached. Come out now.", "system")
+
+    def view(self):
+        return {"mode": self.mode, "since": self.since, "permit": self.permit, "maint": self.maint,
+                "inside": self.inside, "last_checkin": self.last_checkin, "msgs": list(self.msgs),
+                "log": list(self.log), "checks": self.checks}
+
+
 class App:
     def __init__(self, args):
         self.args, self.lock = args, threading.Lock()
         self.live, self.sim = Live(args), Sim()
         self.ser, self.lora_ok = None, False
+        self.ops = {"live": Ops(DATA / "checks.json"), "sim": Ops(DATA / "checks-sim.json")}
+
+    def status(self, mode):
+        """The tank status that the work cycle trusts, or None when there is no current reading."""
+        if mode == "sim":
+            st = self.sim.view_state.get("state")
+            return st and st["site_status"]
+        if self.live.state and self.live.last_rx and time.time() - self.live.last_rx <= 30:
+            return self.live.state["site_status"]
+        return None
+
+    def watch_loop(self):
+        while True:
+            with self.lock:
+                for m, ops in self.ops.items():
+                    ops.watch(self.status(m), list((self.sim if m == "sim" else self.live).events))
+            time.sleep(1)
 
     def feed(self, line, source, **kw):
         with self.lock:
@@ -344,7 +519,8 @@ class App:
                         live = app.live.view()
                     return self._json({"now": time.time(), "live": live, "sim": app.sim.view(),
                                        "links": {"usb": app.ser is not None, "lora": app.lora_ok},
-                                       "config": {"empty_cm": app.args.empty_cm, "full_cm": app.args.full_cm}})
+                                       "config": {"empty_cm": app.args.empty_cm, "full_cm": app.args.full_cm},
+                                       "ops": {m: o.view() for m, o in app.ops.items()}})
                 return super().do_GET()
 
             def do_POST(self):
@@ -360,10 +536,18 @@ class App:
                         app.sim.stop()
                     elif self.path == "/api/box" and body.get("cmd") in ("M", "U", "T"):
                         app.send(body["cmd"])
-                    elif self.path == "/api/ack":   # supervisor acknowledges every open alert
+                    elif self.path == "/api/ack":   # supervisor acknowledges every open alert and help request
+                        m = "sim" if body.get("mode") == "sim" else "live"
                         with app.lock:
-                            for e in (app.sim if body.get("mode") == "sim" else app.live).events:
+                            for e in (app.sim if m == "sim" else app.live).events:
                                 e["acked"] = True
+                            app.ops[m].act("resolve", {}, "supervisor", None)
+                    elif self.path == "/api/ops":
+                        m, who = ("sim" if body.get("mode") == "sim" else "live"), body.get("role")
+                        if who not in ("supervisor", "technician", "worker"):
+                            raise ValueError("Pick a role")
+                        with app.lock:
+                            app.ops[m].act(str(body.get("action")), body, who, app.status(m))
                     elif self.path == "/api/relearn":
                         with app.lock:
                             app.live.conv.relearn()
@@ -377,7 +561,7 @@ class App:
         return H
 
     def run(self):
-        loops = [self.status_to_box_loop]
+        loops = [self.status_to_box_loop, self.watch_loop]
         if self.args.serial != "off":
             loops.append(self.serial_loop)
         if self.args.lora:
