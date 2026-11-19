@@ -31,11 +31,12 @@ Danger levels used: H2S 10 ppm, CO 35 ppm, methane 5,000 ppm (10% of its lower e
 
 - **Detection software:** built and tested, **on simulated data only**. In 100 random runs per gas and scenario (960,000 simulated readings) it raised no false alarms, never flip-flopped on a real leak, and gave about 7 minutes of warning on a slow leak. The true time to danger fell inside the reported range in 96 to 100% of runs.
 - **Not yet validated on real sensors.** Calibration constants are placeholders, and there is no humidity, temperature or cross-sensitivity correction yet.
-- **Not in this repository yet:** ESP32 firmware, the LoRa receiver and the dashboard.
+- **Receiver and dashboard:** built; tested with a simulated box and Simulation mode, not yet with real hardware. The LoRa driver has not yet talked to a real radio.
+- **Not in this repository yet:** the ESP32 firmware.
 
 ## Run it
 
-Requires Python 3.14 and [uv](https://docs.astral.sh/uv/).
+Requires Python 3.13 or later and [uv](https://docs.astral.sh/uv/).
 
 ```bash
 uv sync
@@ -45,6 +46,17 @@ python tests/test_detection_quality.py   # quality metrics, including the time-t
 python tests/stress_sweep.py 100         # randomized sweep across all gases and scenarios (slow)
 python src/main.py                       # live simulated demo in the terminal
 ```
+
+Receiver and dashboard (works fully offline):
+
+```bash
+python gateway/receiver.py                                   # USB auto-detect + LoRa if present; dashboard on http://localhost:8600/
+python gateway/fake_box.py --speed 10 --leak 60 | python gateway/receiver.py --stdin --no-serial --no-lora --port 8601 --data-dir /tmp/nxtest
+python gateway/fake_box.py --test                            # line format, checksum, duplicates and reboot handling
+python gateway/lora_check.py                                 # on the Pi: checks the Ra-02 answers, prints raw packets
+```
+
+Open `#sim` on the dashboard for Simulation mode: generated leaks run through the same detection software, labelled SIMULATED.
 
 ## Layout
 
@@ -58,6 +70,10 @@ python src/main.py                       # live simulated demo in the terminal
 | `src/pipeline/aggregator.py` | Combines all gases and the level into one site status |
 | `src/generator/synthetic_gas_data.py` | Simulated sensor data used by the tests |
 | `tests/` | Unit tests, quality metrics and stress sweeps |
+| `gateway/receiver.py` | Reads the box over USB, LoRa or stdin, estimates ppm, runs the detection, stores to SQLite, serves the API and dashboard |
+| `gateway/sx1278.py` | Receive-only driver for the Ra-02 (SX1278) on the Pi's SPI pins |
+| `gateway/fake_box.py`, `gateway/lora_check.py`, `gateway/run.sh` | Pretend box for testing, first radio test, start script for the Pi |
+| `dashboard/` | Offline dashboard: tank view, sensor tiles, 10-minute chart, Live and Simulation modes |
 
 ## Safety note
 
