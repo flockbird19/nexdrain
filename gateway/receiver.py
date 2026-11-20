@@ -531,7 +531,7 @@ class App:
                 return bool(self.headers.get("Cf-Connecting-Ip"))
 
             def do_GET(self):
-                if self.path == "/api/qr.svg":
+                if self.path.split("?")[0] == "/api/qr.svg":   # the dashboard adds ?u=<address> so the image refreshes
                     url = app.public_url()
                     if not url:
                         return self._json({"error": "no public link running"}, 404)
