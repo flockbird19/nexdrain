@@ -3,8 +3,9 @@
 //
 // Every 1 s: read MQ-4, MQ-7 and the level sensor, run the local alarm, print one $NX line on USB.
 // Every 5 s: send the same line over LoRa. Raw mV and cm only; the receiver converts and predicts.
-// USB commands: T (buzzer test), M (mute 5 min), U (unmute). S0..S3 from the receiver are ignored (no LEDs fitted).
-// Runs with any part missing (bare board, no radio, no sensors). Watchdog restarts it if it ever hangs.
+// Commands (USB, or a LoRa reply right after each radio packet): T (buzzer test), M (mute 5 min), U (unmute),
+// S0..S3 = tank status from the receiver (live or simulated): S2 chirps, S3 sounds the alarm. The box's own alarm always wins.
+
 
 #include <SPI.h>
 #include <LoRa.h>
@@ -27,10 +28,11 @@ const int PIN_CH4 = 34, PIN_CO = 35, PIN_HEATER = 25, PIN_TRIG = 26, PIN_ECHO = 
 const int PIN_BUZZER = 13;   // no LEDs fitted on this box (20 Nov)
 const int PIN_NSS = 5, PIN_RST = 14, PIN_DIO0 = 2;
 
-const uint32_t PHASE_H_MS = 60000, PHASE_L_MS = 90000, MUTE_MS = 300000UL, TEST_MS = 2500;
+const uint32_t PHASE_H_MS = 60000, PHASE_L_MS = 90000, MUTE_MS = 300000UL, TEST_MS = 2500, REMOTE_MS = 12000;
 
 bool loraOk = false, muted = false;
-uint32_t seq = 0, lastTick = 0, phaseStart = 0, muteStart = 0, testStart = 0;
+uint32_t seq = 0, lastTick = 0, phaseStart = 0, muteStart = 0, testStart = 0, lastS = 0;
+int remote = 0;                  // last S0..S3; forgotten after REMOTE_MS without a new one
 bool testing = false;
 char phase = MQ7_HEATER_CYCLE ? 'H' : 'C';
 char cmd[8]; uint8_t cmdLen = 0;
@@ -89,13 +91,16 @@ void updateOutputs(uint32_t now) {
   }
   if (muted && now - muteStart >= MUTE_MS) muted = false;
   bool alarm = aCh4.on || aCo.on || aLevel.on;
-  buzz(alarm && !muted && blink);  // 0.5 s on, 0.5 s off while in alarm
+  int r = now - lastS < REMOTE_MS ? remote : 0;
+  bool chirp = r == 2 && now % 2000 < 200;     // Imminent from the receiver: short chirp every 2 s
+  buzz(!muted && (((alarm || r == 3) && blink) || chirp));   // own alarm or Critical: 0.5 s on, 0.5 s off
 }
 
 void handleCommand(const char *c) {
   if (!strcmp(c, "T")) { testing = true; testStart = millis(); Serial.println("# TEST: 1 s steady sound, then 1 s tone"); }
   else if (!strcmp(c, "M")) { muted = true; muteStart = millis(); Serial.println("# MUTED"); }
   else if (!strcmp(c, "U")) { muted = false; Serial.println("# UNMUTED"); }
+  else if (c[0] == 'S' && c[1] >= '0' && c[1] <= '3' && !c[2]) { remote = c[1] - '0'; lastS = millis(); }
 }
 
 void readCommands() {
@@ -132,6 +137,17 @@ void tick(uint32_t now) {
     LoRa.beginPacket();
     LoRa.print(line);
     LoRa.endPacket();            // about 0.25 s at SF9
+    uint32_t t0 = millis();      // listen briefly: the receiver answers with S0..S3 (and M/U/T) right after
+    while (millis() - t0 < 800) {
+      if (LoRa.parsePacket()) {
+        char b[8]; int n = 0;
+        while (LoRa.available() && n < 7) b[n++] = LoRa.read();
+        b[n] = 0; handleCommand(b);
+        break;
+      }
+      delay(5);
+    }
+    LoRa.idle();
   }
   seq++;
 }

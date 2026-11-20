@@ -473,6 +473,9 @@ class App:
                     pkt = radio.receive()
                     if pkt:
                         data, rssi, snr = pkt
+                        cmd = self.box_status() if data.startswith(b"$NX") else None
+                        if cmd:
+                            radio.send(cmd.encode())   # answer first: the box only listens for ~0.8 s
                         self.feed(data.decode(errors="replace"), "lora", rssi=rssi, snr=snr)
                     else:
                         time.sleep(0.05)
@@ -486,12 +489,23 @@ class App:
         for line in sys.stdin:
             self.feed(line, "stdin")
 
+    def box_status(self):
+        """S0..S3 for the box's buzzer: the running simulation if there is one (so the real box sounds during
+        a dashboard demo), else the live verdict, else None."""
+        sim = self.sim.view_state
+        if sim.get("running") and sim.get("state"):
+            return f"S{STATUS_CODE[sim['state']['site_status']]}"
+        st = self.live.state
+        if st and self.live.last_rx and time.time() - self.live.last_rx < 15:
+            return f"S{STATUS_CODE[st['site_status']]}"
+        return None
+
     def status_to_box_loop(self):
-        """Tell the box the receiver's verdict so its LEDs match the dashboard (firmware brief 5.5)."""
+        """Over USB: tell the box the verdict every 2 s (over LoRa it is the reply to each packet)."""
         while True:
-            st = self.live.state
-            if st and self.live.last_rx and time.time() - self.live.last_rx < 5:
-                self.send(f"S{STATUS_CODE[st['site_status']]}")
+            cmd = self.box_status()
+            if cmd:
+                self.send(cmd)
             time.sleep(2)
 
     # --- http ---

@@ -56,6 +56,24 @@ class SX1278:
     def write(self, reg, val):
         self.spi.xfer2([reg | 0x80, val])
 
+    def send(self, data: bytes):
+        """Short reply to the box, which listens for ~0.8 s after each packet. Always ends back in receive."""
+        try:
+            self.write(0x01, 0x81)                  # standby
+            self.write(0x0E, 0x80); self.write(0x0D, 0x80)   # TX FIFO base, separate from RX at 0x00
+            for b in data:
+                self.write(0x00, b)
+            self.write(0x22, len(data))
+            self.write(0x09, 0x88)                  # PA_BOOST, 2 + 8 = 10 dBm: the legal limit in India
+            self.write(0x12, 0xFF)
+            self.write(0x01, 0x83)                  # transmit
+            t = time.time()
+            while not self.read(0x12) & 0x08 and time.time() - t < 1:   # TxDone
+                time.sleep(0.005)
+        finally:
+            self.write(0x12, 0xFF)
+            self.write(0x01, 0x85)                  # continuous receive
+
     def receive(self):
         """Returns (payload bytes, rssi dBm, snr dB) for a good packet, or None."""
         flags = self.read(0x12)
