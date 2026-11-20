@@ -17,9 +17,10 @@
 #define MQ7_LOW_DUTY_PCT  8      // ~1.4 V worth of heater power: (1.4/5)^2 = 8%
 #define BUZZER_PASSIVE    1      // 1 if the buzzer only clicks when on (it needs a tone); 0 = active buzzer
 // Local alarm limits. PLACEHOLDERS, NOT CALIBRATED: set them from the clean-air and sanitiser readings (brief section 8).
-#define CH4_ALARM_MV      2500
-#define CO_ALARM_MV       3500   // only checked in phase L or C. Clean air read ~2655 mV with the heater always on (20 Nov)
+#define CH4_ALARM_MV      2500   // clean air ~380 mV warm; sanitiser 1,900-3,700 mV (20 Nov). High on purpose: the dashboard warns on the rise first
+#define CO_ALARM_MV       2000   // only checked in phase L or C. Clean air ~1,200 mV warm, sanitiser ~1,770 mV (20 Nov)
 #define LEVEL_ALARM_CM    30     // sewage closer than this to the sensor = nearly full
+#define WARMUP_S          300    // MQ sensors read high for ~5 min after power-up: no gas alarm until then (level alarm works at once)
 
 // ---------- pins (fixed, same as the wiring sheet) ----------
 const int PIN_CH4 = 34, PIN_CO = 35, PIN_HEATER = 25, PIN_TRIG = 26, PIN_ECHO = 27;
@@ -110,8 +111,9 @@ void tick(uint32_t now) {
   float dist = readDistanceCm();
   bool coValid = phase != 'H';
 
-  stepAlarm(aCh4, ch4 > CH4_ALARM_MV);
-  stepAlarm(aCo, coValid ? co > CO_ALARM_MV : -1);
+  bool warm = now / 1000 >= WARMUP_S;
+  stepAlarm(aCh4, warm ? ch4 > CH4_ALARM_MV : -1);
+  stepAlarm(aCo, warm && coValid ? co > CO_ALARM_MV : -1);
   stepAlarm(aLevel, dist < 0 ? -1 : dist < LEVEL_ALARM_CM);
   int mask = aCh4.on | aCo.on << 1 | aLevel.on << 2;
 
@@ -158,7 +160,7 @@ void setup() {
 
   Serial.printf("# NEXDRAIN box %d, firmware v1.0, LoRa: %s\n", BOX_ID, loraOk ? "OK" : "ABSENT");
   Serial.println(MQ7_HEATER_CYCLE ? "# MQ-7 heater cycle: ON" : "# MQ-7 heater cycle: OFF, continuous");
-  Serial.printf("# Alarm limits (not calibrated): CH4 %d mV, CO %d mV, level %d cm\n", CH4_ALARM_MV, CO_ALARM_MV, LEVEL_ALARM_CM);
+  Serial.printf("# Alarm limits (not calibrated): CH4 %d mV, CO %d mV, level %d cm. Gas alarms start after %d s warm-up\n", CH4_ALARM_MV, CO_ALARM_MV, LEVEL_ALARM_CM, WARMUP_S);
 }
 
 void loop() {
