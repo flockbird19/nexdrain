@@ -128,6 +128,23 @@ button, select { font: inherit; color: inherit; }
 /* simulation strip under the top bar */
 .simbar { margin-top: 12px; padding: 8px 10px 8px 12px; border-radius: 20px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .simpill { background: var(--ink); color: var(--bg); font-weight: 600; font-size: 11.5px; letter-spacing: 0.1em; padding: 7px 13px; border-radius: 999px; }
+.vopill { font-weight: 600; font-size: 13px; padding: 7px 13px; border-radius: 999px; color: var(--ink); background: var(--glass-strong); border: 1px solid var(--edge); }
+.vopill[hidden], #share[hidden] { display: none; }
+
+/* share dialog: native <dialog> gives Esc to close, focus trapping and a backdrop */
+.share { width: min(380px, calc(100vw - 32px)); padding: 26px; border-radius: 28px; color: var(--ink); text-align: center; }
+.share[open] { display: grid; gap: 14px; justify-items: center; animation: rise-in 0.35s cubic-bezier(0.16, 1, 0.3, 1); }
+.share::backdrop { background: rgba(4, 10, 12, 0.45); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
+.share h2 { margin: 0; font-size: 22px; font-weight: 600; letter-spacing: -0.02em; }
+.share img { width: min(260px, 70vw); height: auto; aspect-ratio: 1; border-radius: 16px; background: #fff; padding: 6px; }
+.share-url { margin: 0; font-size: 14px; font-weight: 550; overflow-wrap: anywhere; }
+.share-note { margin: 0; font-size: 14px; line-height: 1.5; color: var(--muted); max-width: 34ch; }
+.share form { margin: 4px 0 0; }
+
+/* view-only copy (opened through the public link): every control that changes the system is hidden */
+.viewonly .simbar .ctl, .viewonly form:not([method="dialog"]), .viewonly #presets, .viewonly #acts, .viewonly #ack,
+.viewonly #checkin, .viewonly #sos, .viewonly [data-act], .viewonly #d-mute, .viewonly #d-test, .viewonly #d-relearn,
+.viewonly #pc-end, .viewonly #mc-end { display: none !important; }
 .simbar .note { color: var(--muted); font-size: 14px; }
 .live-only, .sim-only { display: none !important; }
 .live .live-only, .sim .sim-only { display: revert !important; }

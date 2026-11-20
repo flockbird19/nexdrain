@@ -10,6 +10,7 @@ import argparse
 import collections
 import json
 import math
+import re
 import sqlite3
 import sys
 import threading
@@ -494,6 +495,14 @@ class App:
             time.sleep(2)
 
     # --- http ---
+    def public_url(self):
+        """Address of the public view-only link, read from the tunnel's log (gateway/tunnel.sh), or None."""
+        try:
+            found = re.findall(r"https://[a-z0-9-]+\.trycloudflare\.com", (DATA / "tunnel.log").read_text())
+            return found[-1] if found else None
+        except OSError:
+            return None
+
     def handler(self):
         app = self
 
@@ -518,17 +527,37 @@ class App:
                 self.end_headers()
                 self.wfile.write(body)
 
+            def remote(self):   # came in through the public tunnel: watch only, never control
+                return bool(self.headers.get("Cf-Connecting-Ip"))
+
             def do_GET(self):
+                if self.path == "/api/qr.svg":
+                    url = app.public_url()
+                    if not url:
+                        return self._json({"error": "no public link running"}, 404)
+                    import io
+                    import segno
+                    buf = io.BytesIO()
+                    segno.make(url, error="m").save(buf, kind="svg", scale=10, border=2, dark="#0B1819", light="#FFFFFF")
+                    body = buf.getvalue()
+                    self.send_response(200)
+                    self.send_header("Content-Type", "image/svg+xml")
+                    self.send_header("Content-Length", str(len(body)))
+                    self.end_headers()
+                    return self.wfile.write(body)
                 if self.path == "/api/state":
                     with app.lock:
                         live = app.live.view()
                     return self._json({"now": time.time(), "live": live, "sim": app.sim.view(),
                                        "links": {"usb": app.ser is not None, "lora": app.lora_ok},
                                        "config": {"empty_cm": app.args.empty_cm, "full_cm": app.args.full_cm},
-                                       "ops": {m: o.view() for m, o in app.ops.items()}})
+                                       "ops": {m: o.view() for m, o in app.ops.items()},
+                                       "view_only": self.remote(), "public_url": app.public_url()})
                 return super().do_GET()
 
             def do_POST(self):
+                if self.remote():
+                    return self._json({"error": "View only. This link is for watching; controls work on the team's screen."}, 403)
                 n = int(self.headers.get("Content-Length") or 0)
                 if n > 10_000:
                     return self._json({"error": "too large"}, 413)

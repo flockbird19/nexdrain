@@ -275,8 +275,9 @@ document.addEventListener("click", e => {   // buttons inside lists that are red
 
 // ---------- takeover: a message from the supervisor fills the worker's screen ----------
 let shownMsg = null;
+const dismissed = new Set();   // view-only copies close the takeover locally; they cannot mark it seen
 function renderTakeover(O) {
-  const m = role === "worker" ? O.msgs.find(x => !x.up && x.done == null) : null;
+  const m = role === "worker" ? O.msgs.find(x => !x.up && x.done == null && !dismissed.has(x.id)) : null;
   $("takeover").hidden = !m;
   if (!m) { shownMsg = null; return; }
   const [ttl, c] = KIND[m.kind];
@@ -284,7 +285,7 @@ function renderTakeover(O) {
   $("to-from").textContent = `${ttl}, from ${m.from === "system" ? "NEXDRAIN" : "the " + WHO[m.from].toLowerCase()} at ${clock(m.t)}${mode === "sim" ? ". SIMULATED" : ""}`;
   $("to-text").textContent = m.text;
   if (shownMsg !== m.id) { shownMsg = m.id; $("to-ok").focus(); }
-  $("to-ok").onclick = () => op("seen", { id: m.id });
+  $("to-ok").onclick = () => last?.view_only ? (dismissed.add(m.id), renderTakeover(O)) : op("seen", { id: m.id });
 }
 
 // ---------- work: permit, maintenance, messages ----------
@@ -859,8 +860,17 @@ function fitText(groupId, textId, text, xFor, center) {
 }
 
 // ---------- render loop ----------
+$("share").onclick = () => {
+  $("qr").src = "/api/qr.svg?u=" + encodeURIComponent(last.public_url);   // new address, new image
+  $("share-url").textContent = last.public_url;
+  $("share-dlg").showModal();
+};
+
 function render(d) {
   last = d;
+  document.body.classList.toggle("viewonly", !!d.view_only);
+  $("vo").hidden = !d.view_only;
+  $("share").hidden = d.view_only || !d.public_url;
   const S = source(d);
   const status = statusOf(S);
   $("ambient").className = "ambient " + cls(status);

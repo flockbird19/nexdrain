@@ -6,7 +6,7 @@
 <title>NEXDRAIN</title>
 <meta name="description" content="NEXDRAIN: early warning for toxic gas in sewage tanks">
 <link rel="icon" href="logo.svg" type="image/svg+xml">
-<link rel="stylesheet" href="app.css?v=4">
+<link rel="stylesheet" href="app.css?v=5">
 <script>
   // Theme before first paint: saved choice, else the system setting.
   (function () {
@@ -78,8 +78,18 @@
     <option value="technician">Technician</option>
     <option value="worker">Worker at the tank</option>
   </select>
+  <span class="vopill" id="vo" hidden>View only</span>
+  <button class="btn" id="share" type="button" hidden aria-haspopup="dialog">Share</button>
   <button class="btn icon theme" id="theme" type="button" aria-label="Switch light or dark"><i aria-hidden="true"></i></button>
 </header>
+
+<dialog class="share glass" id="share-dlg" aria-labelledby="share-h">
+  <h2 id="share-h">Scan to watch live</h2>
+  <img id="qr" width="260" height="260" alt="QR code that opens the live NEXDRAIN dashboard">
+  <p class="share-url" id="share-url"></p>
+  <p class="share-note">Opens on any phone with internet. It is view only: you can watch every screen, but nothing you tap changes the tank or the alarms.</p>
+  <form method="dialog"><button class="btn primary" type="submit">Close</button></form>
+</dialog>
 
 <div class="modebar glass" id="modebar" hidden aria-live="polite">
   <span class="mb-tag" id="mb-tag"></span><span class="mb-t" id="mb-t"></span>
@@ -395,6 +405,6 @@
 </main>
 </div>
 
-<script src="app.js?v=4"></script>
+<script src="app.js?v=5"></script>
 </body>
 </html>
