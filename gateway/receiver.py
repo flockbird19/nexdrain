@@ -498,7 +498,7 @@ class App:
     def public_url(self):
         """Address of the public view-only link, read from the tunnel's log (gateway/tunnel.sh), or None."""
         try:
-            found = re.findall(r"https://[a-z0-9-]+\.trycloudflare\.com", (DATA / "tunnel.log").read_text())
+            found = re.findall(r"https://[a-z0-9]+-[a-z0-9-]+\.trycloudflare\.com", (DATA / "tunnel.log").read_text())
             return found[-1] if found else None
         except OSError:
             return None

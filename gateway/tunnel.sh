@@ -9,8 +9,11 @@ sleep 1
 : > data/tunnel.log
 nohup bin/cloudflared tunnel --no-autoupdate --url http://localhost:8600 >> data/tunnel.log 2>&1 &
 for i in $(seq 1 30); do
-  url=$(grep -o 'https://[a-z0-9-]*\.trycloudflare\.com' data/tunnel.log | tail -1)
+  # real tunnel names always contain a hyphen; this skips api.trycloudflare.com in error lines
+  url=$(grep -o 'https://[a-z0-9]*-[a-z0-9-]*\.trycloudflare\.com' data/tunnel.log | tail -1)
+  pgrep -f "bin/cloudflared tunnel" >/dev/null || { echo "cloudflared stopped: $(grep -m1 -i fail data/tunnel.log)"; exit 1; }
   [ -n "$url" ] && echo "public view-only link: $url" && exit 0
   sleep 1
 done
 echo "no link yet: check internet, then see data/tunnel.log"
+exit 1
