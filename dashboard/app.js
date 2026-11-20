@@ -158,7 +158,7 @@ function headline(st) {
       return { key: "Level", eta: st.level.eta, why: s === "Critical" ? `The tank is ${f}% full and about to overflow.` : `Sewage is high: the tank is ${f}% full.` };
     }
   }
-  return { key: null, eta: null, why: "Every fitted sensor is below its danger level and steady." };
+  return { key: null, eta: null, why: "Every sensor is below its danger level and steady." };
 }
 
 function staleWhy(S) {
@@ -196,12 +196,12 @@ function renderOverview(d, S) {
   // one line per fitted sensor
   if (!S.st) $("mini").innerHTML = "";
   else {
-    const fitted = GASES.filter(k => S.st.gases[k]?.installed), off = GASES.filter(k => !S.st.gases[k]?.installed);
+    const fitted = GASES.filter(k => S.st.gases[k]?.installed);
     const rows = fitted.map(k => [k, S.st.gases[k].status, pctTxt(S.st.gases[k].pct) + " of danger", S.st.gases[k].pct]);
     if (S.st.level) rows.push(["Level", S.st.level.status, Math.round(S.st.level.fill_pct ?? 0) + "% full", S.st.level.fill_pct]);
     $("mini").innerHTML = rows.map(([k, st, txt, v]) => `<div class="mini-row ${cls(S.stale ? "Stale" : st)}"><span>${NAMES[k]}</span><b>${txt}</b>
       <span class="bar"><i style="width:${Math.min(v ?? 0, 100)}%"></i></span></div>`).join("")
-      + (off.length ? `<div class="mini-off">Not fitted on the prototype: ${off.map(k => NAMES[k].toLowerCase()).join(", ")}</div>` : "");
+
   }
   $("acts").hidden = !(openAlerts(S).length + openUp(d.ops[mode]).length) || role === "worker";
   scene(status, S.st, !S.stale && (mode === "live" || S.s.running), mode === "sim" ? S.s.t !== lastSimT : S.L.lines !== lastLines);
@@ -481,7 +481,7 @@ function renderAnalytics(d, S) {
   // sensor tiles
   if (!S.st) { $("tiles").innerHTML = ""; tileKeys = ""; $("offline").textContent = mode === "sim" ? "Start a simulation to see readings." : "No readings yet."; }
   else {
-    const fitted = GASES.filter(k => S.st.gases[k]?.installed), off = GASES.filter(k => !S.st.gases[k]?.installed);
+    const fitted = GASES.filter(k => S.st.gases[k]?.installed);
     const keys = S.st.level ? [...fitted, "Level"] : fitted;
     if (keys.join() !== tileKeys) buildTiles(keys);
     const learning = S.st.learning || {};
@@ -505,7 +505,7 @@ function renderAnalytics(d, S) {
       foot.textContent = txt;
       foot.className = "t-foot" + (hot ? " hot" : "");
     }
-    $("offline").innerHTML = off.length ? `<b>Not fitted on the prototype:</b> ${off.map(k => NAMES[k].toLowerCase()).join(", ")}. Planned for the pilot box.` : "";
+    $("offline").innerHTML = "";
   }
   renderStrip(S);
   drawChart(S);
