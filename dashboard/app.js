@@ -500,6 +500,7 @@ function renderAnalytics(d, S) {
       if (g.eta) { txt = (isLvl ? "Overflow in " : "Danger in ") + g.eta; hot = true; }
       else if (learning[k] != null) txt = `Learning clean air, ${learning[k]} of 30`;
       else if (g.phase === "H") txt = "Heater cleaning cycle, reading held";
+      else if (g.phase === "C") txt += ", indicative only";
       foot.textContent = txt;
       foot.className = "t-foot" + (hot ? " hot" : "");
     }
@@ -767,7 +768,12 @@ function renderDevice(d, S) {
   for (const id of ["d-mute", "d-test"]) { $(id).disabled = !d.links.usb; $(id).title = d.links.usb ? "" : "Works when the box is connected by USB cable"; }
 
   const co = S.st?.gases?.CO;
-  if (co?.phase) {
+  if (co?.phase === "C") {   // heater wired always on (no MOSFET): no cycle to show
+    $("d-ring").setAttribute("class", "ring s-EarlyWarning");
+    $("d-ring-p").setAttribute("stroke-dashoffset", "0");
+    $("d-phase").textContent = "CO heater: always on";
+    $("d-phase-s").textContent = "No heater cycle on this box, so carbon monoxide readings are indicative only.";
+  } else if (co?.phase) {
     const len = co.phase === "H" ? 60 : 90, frac = Math.min((co.phase_s ?? 0) / len, 1);
     $("d-ring").setAttribute("class", "ring " + (co.phase === "H" ? "s-EarlyWarning" : "s-Safe"));
     $("d-ring-p").setAttribute("stroke-dashoffset", (264 * (1 - frac)).toFixed(1));
