@@ -3,7 +3,7 @@
 //
 // Every 1 s: read MQ-4, MQ-7 and the level sensor, run the local alarm, print one $NX line on USB.
 // Every 5 s: send the same line over LoRa. Raw mV and cm only; the receiver converts and predicts.
-// USB commands: T (self-test), M (mute 5 min), U (unmute), S0..S3 (LED colour from the receiver).
+// USB commands: T (buzzer test), M (mute 5 min), U (unmute). S0..S3 from the receiver are ignored (no LEDs fitted).
 // Runs with any part missing (bare board, no radio, no sensors). Watchdog restarts it if it ever hangs.
 
 #include <SPI.h>
@@ -15,7 +15,7 @@
 #define DIVIDER_RATIO     1.5f   // 10k top / 20k bottom divider. Measure your resistors: ratio = (top + bottom) / bottom
 #define MQ7_HEATER_CYCLE  0      // 0 = heater always on (our wiring, 20 Nov: no MOSFET, GPIO 25 empty), phase sent as C, CO indicative only
 #define MQ7_LOW_DUTY_PCT  8      // ~1.4 V worth of heater power: (1.4/5)^2 = 8%
-#define BUZZER_PASSIVE    0      // 1 if the buzzer only clicks when on (it needs a tone); 0 = active buzzer
+#define BUZZER_PASSIVE    1      // 1 if the buzzer only clicks when on (it needs a tone); 0 = active buzzer
 // Local alarm limits. PLACEHOLDERS, NOT CALIBRATED: set them from the clean-air and sanitiser readings (brief section 8).
 #define CH4_ALARM_MV      2500
 #define CO_ALARM_MV       3500   // only checked in phase L or C. Clean air read ~2655 mV with the heater always on (20 Nov)
@@ -23,16 +23,15 @@
 
 // ---------- pins (fixed, same as the wiring sheet) ----------
 const int PIN_CH4 = 34, PIN_CO = 35, PIN_HEATER = 25, PIN_TRIG = 26, PIN_ECHO = 27;
-const int PIN_BUZZER = 13, PIN_GREEN = 21, PIN_YELLOW = 22, PIN_RED = 4;
+const int PIN_BUZZER = 13;   // no LEDs fitted on this box (20 Nov)
 const int PIN_NSS = 5, PIN_RST = 14, PIN_DIO0 = 2;
 
-const uint32_t PHASE_H_MS = 60000, PHASE_L_MS = 90000, MUTE_MS = 300000UL, OVERRIDE_MS = 10000, TEST_MS = 2500;
+const uint32_t PHASE_H_MS = 60000, PHASE_L_MS = 90000, MUTE_MS = 300000UL, TEST_MS = 2500;
 
 bool loraOk = false, muted = false;
-uint32_t seq = 0, lastTick = 0, phaseStart = 0, muteStart = 0, lastS = 0, testStart = 0;
-bool testing = false, earlySign = false;
+uint32_t seq = 0, lastTick = 0, phaseStart = 0, muteStart = 0, testStart = 0;
+bool testing = false;
 char phase = MQ7_HEATER_CYCLE ? 'H' : 'C';
-int ledCmd = -1;               // S0..S3 from the receiver, -1 = none
 char cmd[8]; uint8_t cmdLen = 0;
 
 struct Alarm { uint8_t over = 0, under = 0; bool on = false; } aCh4, aCo, aLevel;
@@ -78,31 +77,24 @@ void updateHeater(uint32_t now) {
 }
 
 void buzz(bool on) { ledcWrite(PIN_BUZZER, on ? (BUZZER_PASSIVE ? 128 : 256) : 0); }
-void leds(bool g, bool y, bool r) { digitalWrite(PIN_GREEN, g); digitalWrite(PIN_YELLOW, y); digitalWrite(PIN_RED, r); }
 
 void updateOutputs(uint32_t now) {
   bool blink = (now % 1000) < 500;
-  if (testing) {                 // each LED 0.5 s, then two beeps
+  if (testing) {                 // 1 s steady sound (active buzzer), pause, 1 s tone (passive buzzer)
     uint32_t t = now - testStart;
-    if (t >= TEST_MS) { testing = false; Serial.println("# TEST OK"); }
-    else { int step = t / 500; leds(step == 0, step == 1, step == 2); buzz(step >= 3 && (t % 500) < 250); return; }
+    if (t >= TEST_MS) { testing = false; Serial.println("# TEST OK"); return; }
+    ledcWrite(PIN_BUZZER, t < 1000 ? 256 : t >= 1500 ? 128 : 0);
+    return;
   }
   if (muted && now - muteStart >= MUTE_MS) muted = false;
   bool alarm = aCh4.on || aCo.on || aLevel.on;
-  if (alarm) { leds(false, false, true); buzz(!muted && blink); return; }   // a local alarm always wins
-  buzz(false);
-  if (ledCmd >= 0 && now - lastS < OVERRIDE_MS) {
-    leds(ledCmd == 0, ledCmd == 1 || (ledCmd == 2 && blink), ledCmd == 3);
-  } else {
-    leds(!earlySign, earlySign, false);
-  }
+  buzz(alarm && !muted && blink);  // 0.5 s on, 0.5 s off while in alarm
 }
 
 void handleCommand(const char *c) {
-  if (!strcmp(c, "T")) { testing = true; testStart = millis(); }
+  if (!strcmp(c, "T")) { testing = true; testStart = millis(); Serial.println("# TEST: 1 s steady sound, then 1 s tone"); }
   else if (!strcmp(c, "M")) { muted = true; muteStart = millis(); Serial.println("# MUTED"); }
   else if (!strcmp(c, "U")) { muted = false; Serial.println("# UNMUTED"); }
-  else if (c[0] == 'S' && c[1] >= '0' && c[1] <= '3' && !c[2]) { ledCmd = c[1] - '0'; lastS = millis(); }
 }
 
 void readCommands() {
@@ -121,7 +113,6 @@ void tick(uint32_t now) {
   stepAlarm(aCh4, ch4 > CH4_ALARM_MV);
   stepAlarm(aCo, coValid ? co > CO_ALARM_MV : -1);
   stepAlarm(aLevel, dist < 0 ? -1 : dist < LEVEL_ALARM_CM);
-  earlySign = ch4 > CH4_ALARM_MV * 0.7f || (coValid && co > CO_ALARM_MV * 0.7f) || (dist >= 0 && dist < LEVEL_ALARM_CM / 0.7f);
   int mask = aCh4.on | aCo.on << 1 | aLevel.on << 2;
 
   char d[12] = "";
@@ -146,7 +137,6 @@ void tick(uint32_t now) {
 void setup() {
   Serial.begin(115200);
   pinMode(PIN_TRIG, OUTPUT); pinMode(PIN_ECHO, INPUT);
-  pinMode(PIN_GREEN, OUTPUT); pinMode(PIN_YELLOW, OUTPUT); pinMode(PIN_RED, OUTPUT);
   if (MQ7_HEATER_CYCLE) { ledcAttach(PIN_HEATER, 5000, 8); setHeater(phase); }
   ledcAttach(PIN_BUZZER, 2700, 8);   // 2.7 kHz tone for a passive buzzer; full duty = steady on for an active one
   buzz(false);
