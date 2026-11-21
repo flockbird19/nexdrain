@@ -74,6 +74,10 @@ class SX1278:
             self.write(0x12, 0xFF)
             self.write(0x01, 0x85)                  # continuous receive
 
+    def listening(self):
+        """False if the chip lost power or was reset (it wakes up in FSK standby, 0x09) and needs setting up again."""
+        return self.read(0x01) == 0x85
+
     def receive(self):
         """Returns (payload bytes, rssi dBm, snr dB) for a good packet, or None."""
         flags = self.read(0x12)

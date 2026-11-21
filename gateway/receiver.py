@@ -469,16 +469,23 @@ class App:
                 radio = SX1278()
                 self.lora_ok = True
                 print("# lora: listening on 433.5 MHz SF9 BW125", flush=True)
+                idle = 0
                 while True:
                     pkt = radio.receive()
                     if pkt:
                         data, rssi, snr = pkt
-                        cmd = self.box_status() if data.startswith(b"$NX") else None
+                        # off by default: transmitting browned out the Pi's Ra-02 on jumper wires (21 Nov); USB still carries it
+                        cmd = self.box_status() if self.args.lora_reply and data.startswith(b"$NX") else None
                         if cmd:
                             radio.send(cmd.encode())   # answer first: the box only listens for ~0.8 s
                         self.feed(data.decode(errors="replace"), "lora", rssi=rssi, snr=snr)
                     else:
                         time.sleep(0.05)
+                        idle += 1
+                        if idle % 20 == 0 and not radio.listening():   # every ~1 s: a loose wire can reset the chip
+                            self.radio_resets = getattr(self, "radio_resets", 0) + 1
+                            radio = SX1278()                              # set it up again at once, no 5 s wait
+                            print(f"# lora: radio had reset, set up again (reset {self.radio_resets})", flush=True)
             except Exception as e:
                 if self.lora_ok:
                     print(f"# lora: error, retrying ({e})", flush=True)
@@ -634,6 +641,7 @@ def main():
     ap.add_argument("--full-cm", type=float, default=25.0, help="level sensor reading when the tank is full")
     ap.add_argument("--host", default="0.0.0.0")
     ap.add_argument("--port", type=int, default=8600)
+    ap.add_argument("--lora-reply", action="store_true", help="answer each LoRa packet with the tank status (needs a solid 3.3 V supply to the Ra-02)")
     ap.add_argument("--data-dir", type=Path, default=DATA, help="database and clean-air baseline (use a separate one for tests)")
     args = ap.parse_args()
     DATA = args.data_dir
